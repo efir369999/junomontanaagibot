@@ -129,19 +129,6 @@ Time cannot be forked. You can create an alternative history. You cannot create 
 
 ---
 
-## Citation
-
-```bibtex
-@misc{montana2025proofoftime,
-  author = {Montana, Alejandro},
-  title = {Proof of Time: A Peer-to-Peer Digital Time System},
-  year = {2025},
-  month = {December},
-  note = {Whitepaper},
-  url = {https://eprint.iacr.org/}
-}
-```
-
 ## Contact
 
 alejandromontana@tutamail.com
