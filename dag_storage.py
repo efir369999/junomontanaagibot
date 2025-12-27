@@ -9,7 +9,7 @@ Storage Layers:
 - Warm Layer (SSD): Last 30 days blocks, transaction index
 - Cold Layer (HDD/Archival): Full history, prunable after checkpoints
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import sqlite3

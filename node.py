@@ -9,7 +9,7 @@ Includes:
 - Chain management
 - Event handling
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import time
@@ -1197,10 +1197,6 @@ def main():
             cfg_data = json.load(f)
             if 'data_dir' in cfg_data:
                 data_dir = cfg_data['data_dir']
-                from config import StorageConfig
-                config.storage = StorageConfig(
-                    db_path=os.path.join(data_dir, 'blockchain.db')
-                )
             if 'p2p_port' in cfg_data:
                 config.network.default_port = cfg_data['p2p_port']
             if 'rpc_port' in cfg_data:
@@ -1209,8 +1205,11 @@ def main():
     # Command line overrides
     if args.data_dir:
         data_dir = args.data_dir
-        from config import StorageConfig
-        config.storage = StorageConfig(db_path=os.path.join(data_dir, 'blockchain.db'))
+
+    # ALWAYS set correct database path (fixes relative path bug)
+    from config import StorageConfig
+    os.makedirs(data_dir, exist_ok=True)
+    config.storage = StorageConfig(db_path=os.path.join(data_dir, 'blockchain.db'))
     if args.p2p_port:
         config.network.default_port = args.p2p_port
     if args.rpc_port:

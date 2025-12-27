@@ -10,7 +10,7 @@ Includes:
 - Merkle tree operations
 - X25519 key exchange
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import hashlib

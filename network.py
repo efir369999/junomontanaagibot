@@ -13,7 +13,7 @@ Includes:
 - Rate limiting and DoS protection
 - Subnet diversity enforcement
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import socket

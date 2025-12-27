@@ -10,7 +10,7 @@ Tiers:
 - T2 (Confidential): Stealth + hidden amounts (Pedersen) (~1.2 KB, ~8 ms verify, 5× fee)
 - T3 (Ring): Full RingCT (ring size 11) (~2.5 KB, ~40 ms verify, 10× fee)
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import struct

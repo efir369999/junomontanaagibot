@@ -76,14 +76,14 @@ log "Source code downloaded ✓"
 # Setup Python environment
 log "Setting up Python environment (this may take a minute)..."
 cd $POT_HOME
-$SUDO -u $POT_USER python3 -m venv venv
-$SUDO -u $POT_USER ./venv/bin/pip install --upgrade pip -q 2>/dev/null
-$SUDO -u $POT_USER ./venv/bin/pip install -r requirements.txt -q 2>/dev/null
+sudo -u $POT_USER python3 -m venv venv
+sudo -u $POT_USER ./venv/bin/pip install --upgrade pip -q 2>/dev/null
+sudo -u $POT_USER ./venv/bin/pip install -r requirements.txt -q 2>/dev/null
 log "Python environment ready ✓"
 
 # Verify installation
 log "Verifying installation..."
-$SUDO -u $POT_USER ./venv/bin/python -c "
+sudo -u $POT_USER ./venv/bin/python -c "
 from crypto import WesolowskiVDF
 from consensus import ConsensusEngine
 from privacy import LSAG

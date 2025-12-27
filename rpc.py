@@ -10,7 +10,7 @@ Includes:
 - Wallet methods
 - Node control methods
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import json

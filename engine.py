@@ -8,7 +8,7 @@ Based on:
 
 This is the main entry point for running a Proof of Time node.
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import struct

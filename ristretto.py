@@ -13,7 +13,7 @@ References:
 - H. de Valence et al., "The Ristretto Group," 2018
 - https://ristretto.group/
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import struct

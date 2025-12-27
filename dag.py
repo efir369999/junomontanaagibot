@@ -11,7 +11,7 @@ Features:
 - Concurrent block production
 - Linear TPS scaling with network size
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import struct

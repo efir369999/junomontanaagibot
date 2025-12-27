@@ -10,7 +10,7 @@ Includes:
 - Chain state management
 - UTXO-like output tracking
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import sqlite3

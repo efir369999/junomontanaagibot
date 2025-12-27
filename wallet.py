@@ -10,7 +10,7 @@ Includes:
 - Output scanning
 - Encrypted storage
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import os

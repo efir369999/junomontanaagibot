@@ -5,7 +5,7 @@ Based on:
 - ProofOfTime_DAG_Addendum.pdf
 - ProofOfTime_TechnicalSpec_v1.1.pdf
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import pytest

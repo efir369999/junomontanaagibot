@@ -2,7 +2,7 @@
 Proof of Time - Configuration Module
 Production-grade configuration with validation and environment support.
 
-Во времени все равны / In time, everyone is equal
+Time is the ultimate proof.
 """
 
 import os
