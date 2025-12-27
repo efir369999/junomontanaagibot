@@ -49,8 +49,18 @@ def setup_logging(level: str = "INFO", log_file: Optional[str] = None) -> loggin
 
 class ProtocolConstants:
     """Immutable protocol constants - changing these breaks consensus."""
-    
-    # Block timing
+
+    # Dual-layer timing
+    # PoH layer: fast blocks (1 second)
+    POH_SLOT_TIME: int = 1  # 1 second per PoH slot
+    POH_TICKS_PER_SLOT: int = 64  # Ticks per slot
+    POH_HASHES_PER_TICK: int = 12500  # Hash operations per tick
+
+    # PoT layer: finality checkpoints (10 minutes)
+    POT_CHECKPOINT_INTERVAL: int = 600  # 600 PoH slots = 10 minutes
+    POT_VDF_TIME: int = 600  # VDF computation time (10 minutes)
+
+    # Legacy (PoT blocks for halving calculation)
     BLOCK_INTERVAL: int = 600  # 10 minutes in seconds
     HALVING_INTERVAL: int = 210_000  # Blocks per halving epoch
     MAX_BLOCKS: int = 6_930_000  # Total blocks (33 halvings)

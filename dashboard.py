@@ -1,40 +1,50 @@
 #!/usr/bin/env python3
 """
 Proof of Time - Real-time Node Dashboard
-Minimal display of critical network metrics.
+
+Displays dual-layer consensus metrics:
+- PoH: Fast layer (1 block/second)
+- PoT: Finality layer (1 checkpoint/10 minutes)
 """
 
 import os
 import sys
 import time
 import json
-import socket
 from datetime import datetime
 
 # Colors
-G = '\033[92m'  # Green
-Y = '\033[93m'  # Yellow
-R = '\033[91m'  # Red
-C = '\033[96m'  # Cyan
-B = '\033[1m'   # Bold
-D = '\033[2m'   # Dim
-N = '\033[0m'   # Reset
+G = '\033[92m'   # Green
+Y = '\033[93m'   # Yellow
+R = '\033[91m'   # Red
+C = '\033[96m'   # Cyan
+M = '\033[95m'   # Magenta
+B = '\033[1m'    # Bold
+D = '\033[2m'    # Dim
+N = '\033[0m'    # Reset
 
 def c(text, color):
     """Colorize text."""
     return f"{color}{text}{N}" if sys.stdout.isatty() else str(text)
 
 def get_metrics():
-    """Get critical metrics from node."""
+    """Get metrics from node."""
     m = {
-        'height': 0,
+        # PoH layer (fast, 1 sec blocks)
+        'poh_slot': 0,
+        'poh_tps': 0.0,
+        'poh_last': 0,
+
+        # PoT layer (finality, 10 min checkpoints)
+        'pot_checkpoint': 0,
+        'pot_last': 0,
+        'pot_next': 600,
+        'pot_finalized': 0,
+
+        # Network
         'nodes': 0,
-        'block_time': 600,  # Target: 10 min
-        'last_block_age': 0,
-        'time_to_block': 0,
-        'status': 'offline',
         'mempool': 0,
-        'tps': 0.0,
+        'status': 'offline',
     }
 
     # Try RPC call to running node
@@ -49,14 +59,16 @@ def get_metrics():
             data = json.loads(resp.read())
             if 'result' in data:
                 r = data['result']
-                m['height'] = r.get('height', 0)
+                m['poh_slot'] = r.get('poh_slot', r.get('height', 0))
+                m['pot_checkpoint'] = r.get('pot_checkpoint', 0)
                 m['nodes'] = r.get('peers', 0)
                 m['mempool'] = r.get('mempool_size', 0)
+                m['poh_tps'] = r.get('tps', 0.0)
                 m['status'] = 'online'
     except:
         pass
 
-    # Try database directly
+    # Try database directly (fallback)
     try:
         from database import BlockchainDB
         from config import StorageConfig
@@ -67,12 +79,17 @@ def get_metrics():
 
             state = db.get_chain_state()
             if state:
-                m['height'] = state.get('tip_height', 0)
+                m['poh_slot'] = state.get('tip_height', 0)
+                m['pot_checkpoint'] = state.get('tip_height', 0) // 600
 
             latest = db.get_latest_block()
             if latest:
-                m['last_block_age'] = int(time.time()) - latest.timestamp
-                m['time_to_block'] = max(0, 600 - m['last_block_age'])
+                m['poh_last'] = int(time.time()) - latest.timestamp
+                # PoT checkpoint timing
+                slots_in_epoch = m['poh_slot'] % 600
+                m['pot_next'] = 600 - slots_in_epoch
+                m['pot_last'] = slots_in_epoch
+                m['pot_finalized'] = (m['pot_checkpoint'] - 1) * 600 if m['pot_checkpoint'] > 0 else 0
 
             db.close()
             if m['status'] == 'offline':
@@ -112,29 +129,34 @@ def render(m):
     else:
         status = c('OFFLINE', R)
 
-    # Time to block color
-    ttb = m['time_to_block']
-    if ttb > 300:
-        ttb_color = G
-    elif ttb > 60:
-        ttb_color = Y
+    # PoT next checkpoint color
+    pot_next = m['pot_next']
+    if pot_next > 300:
+        pot_color = G
+    elif pot_next > 60:
+        pot_color = Y
     else:
-        ttb_color = R
+        pot_color = R
 
     print()
-    print(c("  PROOF OF TIME", G) + c(" │ ", D) + c("Time is the ultimate proof", D))
-    print(c("  ─────────────────────────────────────────", D))
+    print(c("  PROOF OF TIME", G) + c(" │ ", D) + c("Dual-Layer Consensus", D))
+    print(c("  ═══════════════════════════════════════════════", D))
     print()
-    print(f"  {c('STATUS', C)}      {status}")
+    print(f"  {c('STATUS', C)}        {status}")
+    print(f"  {c('NODES', C)}         {m['nodes']}")
+    print(f"  {c('MEMPOOL', C)}       {m['mempool']} tx")
     print()
-    print(f"  {c('HEIGHT', C)}      {c(m['height'], B)}")
-    print(f"  {c('NODES', C)}       {m['nodes']}")
-    print(f"  {c('MEMPOOL', C)}     {m['mempool']} tx")
+    print(c("  ─── PoH Layer (1 sec blocks) ─────────────────", D))
+    print(f"  {c('SLOT', M)}          {c(m['poh_slot'], B)}")
+    print(f"  {c('TPS', M)}           {m['poh_tps']:.1f}")
+    print(f"  {c('LAST BLOCK', M)}    {m['poh_last']}s ago")
     print()
-    print(f"  {c('NEXT BLOCK', C)}  {c(format_time(ttb), ttb_color)}")
-    print(f"  {c('LAST BLOCK', C)}  {format_time(m['last_block_age'])} ago")
+    print(c("  ─── PoT Layer (10 min finality) ──────────────", D))
+    print(f"  {c('CHECKPOINT', C)}    {c(m['pot_checkpoint'], B)}")
+    print(f"  {c('FINALIZED', C)}     slot {m['pot_finalized']}")
+    print(f"  {c('NEXT', C)}          {c(format_time(pot_next), pot_color)}")
     print()
-    print(c(f"  ─────────────────────────────────────────", D))
+    print(c(f"  ═══════════════════════════════════════════════", D))
     print(c(f"  Updated: {now}  │  Ctrl+C to exit", D))
 
 def clear():
