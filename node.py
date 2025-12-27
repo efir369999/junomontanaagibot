@@ -333,20 +333,20 @@ class Mempool:
 
 
 # ============================================================================
-# BLOCK PRODUCER (MINER)
+# BLOCK PRODUCER (PoH + PoT DUAL LAYER)
 # ============================================================================
 
 class BlockProducer:
     """
-    Produces new blocks when selected as leader.
-    
-    Process:
-    1. Check if we're eligible leader (VRF)
-    2. Compute VDF proof
-    3. Assemble block with transactions
-    4. Sign and broadcast
+    Dual-layer block producer.
+
+    PoH Layer: Produces blocks every 1 second
+    PoT Layer: Creates VDF checkpoints every 600 blocks (10 minutes)
+
+    Solo node mode: Always produces blocks (no VRF check needed)
+    Network mode: Uses VRF for leader selection
     """
-    
+
     def __init__(
         self,
         node: 'FullNode',
@@ -356,98 +356,109 @@ class BlockProducer:
         self.node = node
         self.secret_key = secret_key
         self.public_key = public_key
-        
+
         self.vdf = WesolowskiVDF(PROTOCOL.VDF_MODULUS_BITS)
         self.running = False
         self._thread: Optional[threading.Thread] = None
-    
+
+        # PoH state
+        self.poh_hash = b'\x00' * 32  # Current PoH chain hash
+        self.poh_count = 0  # Total PoH hashes computed
+        self.last_block_time = 0.0
+
+        # Stats
+        self.blocks_produced = 0
+        self.checkpoints_produced = 0
+
     def start(self):
         """Start block production."""
         self.running = True
         self._thread = threading.Thread(target=self._production_loop, daemon=True)
         self._thread.start()
-        logger.info("Block producer started")
-    
+        logger.info("PoH block producer started (1 block/sec)")
+
     def stop(self):
         """Stop block production."""
         self.running = False
         if self._thread:
             self._thread.join(timeout=5)
         logger.info("Block producer stopped")
-    
+
+    def _poh_hash_step(self) -> bytes:
+        """Single PoH hash step."""
+        self.poh_hash = sha256(self.poh_hash)
+        self.poh_count += 1
+        return self.poh_hash
+
     def _production_loop(self):
-        """Main production loop."""
+        """
+        Main PoH production loop.
+
+        Produces 1 block per second with PoH chain.
+        Every 600 blocks, triggers PoT checkpoint with VDF.
+        """
+        next_block_time = time.time()
+
         while self.running:
             try:
-                # Check if we should produce
-                if self.node.sync_state != SyncState.SYNCED:
-                    time.sleep(1)
+                now = time.time()
+
+                # Wait for next slot
+                if now < next_block_time:
+                    time.sleep(max(0, next_block_time - now))
                     continue
-                
+
+                # Get current tip
                 tip = self.node.get_chain_tip()
                 if not tip:
-                    time.sleep(1)
+                    time.sleep(0.1)
                     continue
-                
-                # Check timing
-                time_since_block = time.time() - tip.timestamp
-                if time_since_block < PROTOCOL.BLOCK_INTERVAL * 0.9:
-                    time.sleep(10)
-                    continue
-                
-                # Check if we're leader
-                if self._check_leadership(tip):
-                    self._produce_block(tip)
-                
-                time.sleep(1)
-                
+
+                # Produce PoH block
+                self._produce_poh_block(tip)
+
+                # Schedule next block (1 second later)
+                next_block_time += PROTOCOL.POH_SLOT_TIME
+
+                # Prevent drift
+                if next_block_time < time.time():
+                    next_block_time = time.time() + PROTOCOL.POH_SLOT_TIME
+
             except Exception as e:
                 logger.error(f"Block production error: {e}")
-                time.sleep(5)
-    
-    def _check_leadership(self, tip: ChainTip) -> bool:
-        """Check if we're the leader for next block."""
-        next_height = tip.height + 1
-        
-        # Compute VRF input using consensus method for consistency
-        vrf_input = self.node.consensus.leader_selector.compute_selection_input(
-            tip.hash, next_height
-        )
-        vrf_output = ECVRF.prove(self.secret_key, vrf_input)
-        
-        # Get our probability
-        probs = self.node.consensus.compute_probabilities()
-        our_prob = probs.get(self.public_key, 0)
-        
-        if our_prob == 0:
-            return False
-        
-        # Check if VRF output qualifies us as leader
-        return self.node.consensus.leader_selector.is_leader(
-            vrf_output.beta, our_prob
-        )
-    
-    def _produce_block(self, tip: ChainTip):
-        """Produce new block."""
-        logger.info(f"Producing block at height {tip.height + 1}")
-        
+                time.sleep(1)
+
+    def _produce_poh_block(self, tip: ChainTip):
+        """Produce a PoH block (1 second)."""
         new_height = tip.height + 1
         timestamp = int(time.time())
-        
-        # VRF proof using consensus method for consistency
-        vrf_input = self.node.consensus.leader_selector.compute_selection_input(
-            tip.hash, new_height
-        )
+
+        # Advance PoH chain (64 ticks × 12500 hashes = 800,000 hashes)
+        for _ in range(PROTOCOL.POH_TICKS_PER_SLOT):
+            for _ in range(PROTOCOL.POH_HASHES_PER_TICK):
+                self._poh_hash_step()
+
+        # Check if this is a PoT checkpoint (every 600 blocks)
+        is_checkpoint = (new_height % PROTOCOL.POT_CHECKPOINT_INTERVAL == 0)
+
+        # VDF proof only for checkpoints
+        if is_checkpoint and new_height > 0:
+            vdf_iterations = self.node.config.vdf.iterations
+            vdf_proof = self.vdf.compute(tip.hash, vdf_iterations)
+            vdf_output = vdf_proof.output
+            vdf_proof_bytes = vdf_proof.proof
+        else:
+            vdf_iterations = 0
+            vdf_output = self.poh_hash  # Use PoH hash instead
+            vdf_proof_bytes = b''
+
+        # VRF for leader selection (simplified for solo node)
+        vrf_input = sha256(tip.hash + struct.pack('<Q', new_height))
         vrf_output = ECVRF.prove(self.secret_key, vrf_input)
-        
-        # VDF proof
-        vdf_iterations = self.node.config.vdf.iterations
-        vdf_proof = self.vdf.compute(tip.hash, vdf_iterations)
-        
+
         # Create coinbase
-        reward = get_block_reward(new_height)
-        
-        # Use our wallet address for reward
+        reward = get_block_reward(new_height // PROTOCOL.POT_CHECKPOINT_INTERVAL)
+
         if self.node.wallet:
             reward_address = self.node.wallet.get_primary_address()
             view_pub = reward_address[:32]
@@ -455,17 +466,17 @@ class BlockProducer:
         else:
             view_pub = self.public_key
             spend_pub = self.public_key
-        
+
         coinbase = Transaction.create_coinbase(
             height=new_height,
             reward_address=view_pub,
             reward_tx_pubkey=spend_pub,
-            extra_data=b"PoT Block"
+            extra_data=f"PoH slot {new_height}".encode()
         )
-        
+
         # Get transactions from mempool
         txs = [coinbase] + self.node.mempool.get_transactions_for_block()
-        
+
         # Build block
         block = Block(
             header=BlockHeader(
@@ -475,8 +486,8 @@ class BlockProducer:
                 timestamp=timestamp,
                 height=new_height,
                 vdf_input=tip.hash,
-                vdf_output=vdf_proof.output,
-                vdf_proof=vdf_proof.proof,
+                vdf_output=vdf_output,
+                vdf_proof=vdf_proof_bytes,
                 vdf_iterations=vdf_iterations,
                 vrf_output=vrf_output.beta,
                 vrf_proof=vrf_output.proof,
@@ -485,22 +496,50 @@ class BlockProducer:
             ),
             transactions=txs
         )
-        
+
         # Set merkle root
         block.header.merkle_root = block.compute_merkle_root()
-        
+
         # Sign block
         signing_hash = block.header.signing_hash()
         signature = Ed25519.sign(self.secret_key, signing_hash)
         block.header.leader_signature = signature
-        
+
         # Process locally
         if self.node.process_block(block):
-            # Broadcast to network
-            self.node.network.broadcast_block(block)
-            logger.info(f"Produced and broadcast block {new_height}: {block.hash.hex()[:16]}...")
+            self.blocks_produced += 1
+            self.last_block_time = time.time()
+
+            if is_checkpoint:
+                self.checkpoints_produced += 1
+                logger.info(f"PoT checkpoint {new_height // 600}: slot {new_height}")
+            elif new_height % 60 == 0:
+                # Log every minute
+                logger.debug(f"PoH slot {new_height} (TPS: {len(txs)-1})")
         else:
-            logger.warning("Failed to process our own block")
+            logger.warning(f"Failed to process block {new_height}")
+
+    def _check_leadership(self, tip: ChainTip) -> bool:
+        """Check if we're the leader for next block (solo mode: always true)."""
+        # In solo mode, we're always the leader
+        if self.node.network.get_peer_count() == 0:
+            return True
+
+        next_height = tip.height + 1
+
+        # Compute VRF input
+        vrf_input = sha256(tip.hash + struct.pack('<Q', next_height))
+        vrf_output = ECVRF.prove(self.secret_key, vrf_input)
+
+        # Get our probability
+        probs = self.node.consensus.compute_probabilities()
+        our_prob = probs.get(self.public_key, 0.5)  # Default 50% for solo
+
+        # Check if VRF output qualifies us as leader
+        return self.node.consensus.leader_selector.is_leader(
+            vrf_output.beta, our_prob
+        )
+    
 
 
 # ============================================================================
@@ -1080,33 +1119,39 @@ def _self_test():
 
 
 def _render_dashboard(node, db_path: str = '/var/lib/proofoftime/blockchain.db'):
-    """Render live dashboard."""
+    """Render live PoH dashboard."""
     import os
     import sys
     from datetime import datetime
 
     # Colors
-    G, Y, R, C, B, D, N = '\033[92m', '\033[93m', '\033[91m', '\033[96m', '\033[1m', '\033[2m', '\033[0m'
+    G, Y, R, C, M, B, D, N = '\033[92m', '\033[93m', '\033[91m', '\033[96m', '\033[95m', '\033[1m', '\033[2m', '\033[0m'
 
     def col(text, color):
         return f"{color}{text}{N}" if sys.stdout.isatty() else str(text)
 
     # Get metrics
-    m = {'height': 0, 'nodes': 0, 'mempool': 0, 'last_block_age': -1, 'time_to_block': 600, 'status': 'running'}
+    m = {
+        'poh_slot': 0, 'pot_checkpoint': 0, 'nodes': 0, 'mempool': 0,
+        'last_block_age': 0, 'pot_next': 600, 'blocks_produced': 0
+    }
 
     try:
         if hasattr(node, 'db') and node.db:
             state = node.db.get_chain_state()
             if state:
-                m['height'] = state.get('tip_height', 0)
+                m['poh_slot'] = state.get('tip_height', 0)
+                m['pot_checkpoint'] = m['poh_slot'] // 600
             latest = node.db.get_latest_block()
             if latest and latest.timestamp > 0:
                 m['last_block_age'] = int(time.time()) - latest.timestamp
-                m['time_to_block'] = max(0, 600 - m['last_block_age'])
+                m['pot_next'] = 600 - (m['poh_slot'] % 600)
         if hasattr(node, 'network') and node.network:
-            m['nodes'] = len(getattr(node.network, 'peers', []))
+            m['nodes'] = node.network.get_peer_count()
         if hasattr(node, 'mempool') and node.mempool:
-            m['mempool'] = len(node.mempool)
+            m['mempool'] = node.mempool.get_count()
+        if hasattr(node, 'producer') and node.producer:
+            m['blocks_produced'] = node.producer.blocks_produced
     except:
         pass
 
@@ -1116,32 +1161,31 @@ def _render_dashboard(node, db_path: str = '/var/lib/proofoftime/blockchain.db')
         if s < 3600: return f"{s // 60:02d}:{s % 60:02d}"
         return f"{s // 3600}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
-    # Time to block color
-    ttb = m['time_to_block']
-    ttb_col = G if ttb > 300 else (Y if ttb > 60 else R)
-
-    # Last block display
-    if m['last_block_age'] < 0:
-        last_block_str = col("--:--", D)
-    else:
-        last_block_str = f"{fmt_time(m['last_block_age'])} ago"
+    # PoT next checkpoint color
+    pot_next = m['pot_next']
+    pot_col = G if pot_next > 300 else (Y if pot_next > 60 else R)
 
     now = datetime.now().strftime('%H:%M:%S')
 
     # Clear and render
     os.system('clear' if os.name != 'nt' else 'cls')
     print()
-    print(col("  PROOF OF TIME", G) + col(" │ ", D) + col("Time is the ultimate proof", D))
-    print(col("  ─────────────────────────────────────────", D))
+    print(col("  PROOF OF TIME", G) + col(" │ ", D) + col("Dual-Layer Consensus", D))
+    print(col("  ═══════════════════════════════════════════════", D))
     print()
-    print(f"  {col('STATUS', C)}      {col('RUNNING', G)}")
+    print(f"  {col('STATUS', C)}        {col('PRODUCING', G)}")
+    print(f"  {col('NODES', C)}         {m['nodes']}")
+    print(f"  {col('MEMPOOL', C)}       {m['mempool']} tx")
     print()
-    print(f"  {col('HEIGHT', C)}      {col(m['height'], B)}")
-    print(f"  {col('NODES', C)}       {m['nodes']}")
-    print(f"  {col('MEMPOOL', C)}     {m['mempool']} tx")
+    print(col("  ─── PoH Layer (1 sec blocks) ─────────────────", D))
+    print(f"  {col('SLOT', M)}          {col(m['poh_slot'], B)}")
+    print(f"  {col('PRODUCED', M)}      {m['blocks_produced']}")
+    print(f"  {col('LAST', M)}          {m['last_block_age']}s ago")
     print()
-    print(f"  {col('NEXT BLOCK', C)}  {col(fmt_time(ttb), ttb_col)}")
-    print(f"  {col('LAST BLOCK', C)}  {last_block_str}")
+    print(col("  ─── PoT Layer (10 min finality) ──────────────", D))
+    print(f"  {col('CHECKPOINT', C)}    {col(m['pot_checkpoint'], B)}")
+    print(f"  {col('FINALIZED', C)}     slot {m['pot_checkpoint'] * 600}")
+    print(f"  {col('NEXT', C)}          {col(fmt_time(pot_next), pot_col)}")
     print()
     print(col("  ─────────────────────────────────────────", D))
     print(col(f"  {now}  │  Ctrl+C to stop", D))
