@@ -1069,6 +1069,96 @@ def _self_test():
     logger.info("All node self-tests passed!")
 
 
+def main():
+    """Main entry point for running the node."""
+    import argparse
+    import signal
+    import json
+    import os
+
+    parser = argparse.ArgumentParser(description="Proof of Time Node")
+    parser.add_argument("--config", "-c", type=str, help="Path to config file")
+    parser.add_argument("--run", "-r", action="store_true", help="Run the node (default: self-test only)")
+    parser.add_argument("--data-dir", type=str, help="Data directory")
+    parser.add_argument("--p2p-port", type=int, help="P2P port (default: 8333)")
+    parser.add_argument("--rpc-port", type=int, help="RPC port (default: 8332)")
+    parser.add_argument("--log-level", type=str, default="INFO", help="Log level")
+    args = parser.parse_args()
+
+    # Configure logging
+    log_level = getattr(logging, args.log_level.upper(), logging.INFO)
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    if not args.run:
+        # Self-test mode
+        _self_test()
+        return
+
+    # Load config
+    config = NodeConfig()
+
+    if args.config and os.path.exists(args.config):
+        with open(args.config, 'r') as f:
+            cfg_data = json.load(f)
+            if 'data_dir' in cfg_data:
+                from config import StorageConfig
+                config.storage = StorageConfig(
+                    db_path=os.path.join(cfg_data['data_dir'], 'blockchain.db')
+                )
+            if 'p2p_port' in cfg_data:
+                config.network.default_port = cfg_data['p2p_port']
+            if 'rpc_port' in cfg_data:
+                config.rpc_port = cfg_data.get('rpc_port', 8332)
+            if 'log_level' in cfg_data:
+                logging.getLogger().setLevel(getattr(logging, cfg_data['log_level'].upper(), logging.INFO))
+
+    # Command line overrides
+    if args.data_dir:
+        from config import StorageConfig
+        config.storage = StorageConfig(db_path=os.path.join(args.data_dir, 'blockchain.db'))
+    if args.p2p_port:
+        config.network.default_port = args.p2p_port
+    if args.rpc_port:
+        config.rpc_port = args.rpc_port
+
+    # Create and start node
+    logger.info("=" * 60)
+    logger.info("  PROOF OF TIME NODE")
+    logger.info("  Во времени все равны / In time, everyone is equal")
+    logger.info("=" * 60)
+
+    node = FullNode(config)
+
+    # Graceful shutdown handler
+    shutdown_event = threading.Event()
+
+    def signal_handler(signum, frame):
+        logger.info(f"Received signal {signum}, shutting down...")
+        shutdown_event.set()
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
+        node.start()
+        logger.info("Node is running. Press Ctrl+C to stop.")
+
+        # Main loop - wait for shutdown signal
+        while not shutdown_event.is_set():
+            shutdown_event.wait(timeout=1.0)
+
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received")
+    except Exception as e:
+        logger.error(f"Node error: {e}")
+        raise
+    finally:
+        node.stop()
+        logger.info("Node shutdown complete")
+
+
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    _self_test()
+    main()
