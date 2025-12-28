@@ -1432,8 +1432,21 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    # Load or create wallet
+    from wallet import Wallet
+    wallet_file = os.path.join(data_dir, 'wallet.dat')
+    if os.path.exists(wallet_file):
+        wallet = Wallet.load(wallet_file)
+        logger.info(f"Loaded wallet: {wallet.get_primary_address().hex()[:16]}...")
+    else:
+        wallet = Wallet()
+        wallet.save(wallet_file)
+        os.chmod(wallet_file, 0o600)
+        logger.info(f"Created new wallet: {wallet.get_primary_address().hex()[:16]}...")
+
     try:
         node.start()
+        node.set_wallet(wallet)
         node.enable_mining(secret_key, public_key)
 
         # Main loop with dashboard
