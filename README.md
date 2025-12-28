@@ -1,5 +1,7 @@
 # Proof of Time
 
+**Proof of Time: Chronos proves, Athena selects, Adonis trusts.**
+
 *"Running Bitcoin"* — Hal Finney, January 11, 2009
 
 *"Running Time"* — December 25, 2025
@@ -59,6 +61,14 @@ If everything is a dream, time is the only measure within it. Not space — that
 **The Great Equalizer:** Nothing can be measured without Time. Time is not one of the variables. Time is the medium in which variables exist.
 
 ## Technical Specifications
+
+The protocol is built on the **Pantheon** architecture — a modular system where each component is named after a Greek deity representing its core function.
+
+| Component | Role | Logic |
+|-----------|------|-------|
+| **Chronos** | Time | Verifiable Delay Functions (VDF) |
+| **Athena** | Consensus | Leader selection & Governance |
+| **Adonis** | Reputation | Multi-dimensional trust model |
 
 - **Consensus:** VDF + Weighted Probability
 - **Transaction Ordering:** Proof of History (PoH) within 10-minute epochs
