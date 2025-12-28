@@ -84,12 +84,12 @@ class ProofOfTimeNode:
         config: Optional[NodeConfig] = None,
         private_key: Optional[bytes] = None
     ):
-        self.config = config or NodeConfig.default()
+        self.config = config or NodeConfig()
         
         # Generate or use provided keys
         if private_key:
             self.private_key = private_key
-            self.public_key = Ed25519.public_key_from_private(private_key)
+            self.public_key = Ed25519.derive_public_key(private_key)
         else:
             self.private_key, self.public_key = Ed25519.generate_keypair()
         
@@ -566,7 +566,7 @@ class ProtocolRunner:
         if config_path:
             self.config = NodeConfig.from_file(config_path)
         else:
-            self.config = NodeConfig.default()
+            self.config = NodeConfig()
         
         self.node: Optional[ProofOfTimeNode] = None
     

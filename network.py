@@ -220,6 +220,13 @@ class NoiseWrapper:
     """
     
     def __init__(self, static_keys: NoiseKeys, is_initiator: bool):
+        if not NOISE_AVAILABLE:
+            # Жёстко требуем установленный noiseprotocol для исключения
+            # небезопасных «ручных» шифров и заглушек.
+            raise RuntimeError(
+                "Noise Protocol library is required. Install with: pip install noiseprotocol"
+            )
+
         self.static_keys = static_keys
         self.is_initiator = is_initiator
         self.state = NoiseState.NONE
@@ -230,17 +237,7 @@ class NoiseWrapper:
         self._recv_cipher = None
         self._handshake_hash: Optional[bytes] = None
         
-        # Handshake state (manual implementation if noise library unavailable)
-        self._ephemeral_private: Optional[bytes] = None
-        self._ephemeral_public: Optional[bytes] = None
-        self._remote_ephemeral: Optional[bytes] = None
-        self._chaining_key: bytes = b''
-        self._handshake_key: bytes = b''
-        
-        if NOISE_AVAILABLE:
-            self._init_noise_protocol()
-        else:
-            self._init_manual_handshake()
+        self._init_noise_protocol()
     
     def _init_noise_protocol(self):
         """Initialize using noise library."""
@@ -260,65 +257,16 @@ class NoiseWrapper:
         
         self.noise.start_handshake()
     
-    def _init_manual_handshake(self):
-        """Initialize manual handshake state."""
-        # Generate ephemeral keypair
-        if CRYPTOGRAPHY_AVAILABLE:
-            eph_private = X25519PrivateKey.generate()
-            self._ephemeral_private = eph_private.private_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PrivateFormat.Raw,
-                encryption_algorithm=serialization.NoEncryption()
-            )
-            self._ephemeral_public = eph_private.public_key().public_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PublicFormat.Raw
-            )
-        else:
-            self._ephemeral_private, self._ephemeral_public = X25519.generate_keypair()
-        
-        # Initialize chaining key with protocol name hash
-        self._chaining_key = sha256(NOISE_PROTOCOL_NAME)
-        self._handshake_key = self._chaining_key
-    
     def get_handshake_message(self) -> Optional[bytes]:
         """Get next handshake message to send."""
-        if NOISE_AVAILABLE:
-            try:
-                if self.noise.handshake_finished:
-                    return None
-                return self.noise.write_message()
-            except Exception as e:
-                logger.error(f"Noise handshake write error: {e}")
-                self.state = NoiseState.FAILED
+        try:
+            if self.noise.handshake_finished:
                 return None
-        else:
-            return self._manual_get_handshake_message()
-    
-    def _manual_get_handshake_message(self) -> Optional[bytes]:
-        """Manual handshake message generation."""
-        if self.state == NoiseState.ESTABLISHED:
+            return self.noise.write_message()
+        except Exception as e:
+            logger.error(f"Noise handshake write error: {e}")
+            self.state = NoiseState.FAILED
             return None
-        
-        if self.is_initiator:
-            if self.state == NoiseState.NONE:
-                # -> e
-                self.state = NoiseState.INITIATOR_WAITING
-                return self._ephemeral_public
-            elif self.state == NoiseState.INITIATOR_WAITING:
-                # -> s, se (after receiving <- e, ee, s, es)
-                # Encrypt static public key
-                encrypted_static = self._encrypt_handshake(self.static_keys.public_key)
-                self.state = NoiseState.ESTABLISHED
-                return encrypted_static
-        else:
-            if self.state == NoiseState.RESPONDER_WAITING:
-                # <- e, ee, s, es
-                # DH operations and encrypt static key
-                encrypted_static = self._encrypt_handshake(self.static_keys.public_key)
-                return self._ephemeral_public + encrypted_static
-        
-        return None
     
     def process_handshake_message(self, message: bytes) -> bool:
         """
@@ -326,209 +274,41 @@ class NoiseWrapper:
         
         Returns True if handshake is complete.
         """
-        if NOISE_AVAILABLE:
-            try:
-                payload = self.noise.read_message(message)
-                if self.noise.handshake_finished:
-                    self.state = NoiseState.ESTABLISHED
-                    self._handshake_hash = self.noise.get_handshake_hash()
-                    # Get remote static key
-                    self.remote_static = self.noise.get_keypair(Keypair.REMOTE_STATIC)
-                    return True
-                return False
-            except Exception as e:
-                logger.error(f"Noise handshake read error: {e}")
-                self.state = NoiseState.FAILED
-                return False
-        else:
-            return self._manual_process_handshake_message(message)
-    
-    def _manual_process_handshake_message(self, message: bytes) -> bool:
-        """Manual handshake message processing."""
-        if self.is_initiator:
-            if self.state == NoiseState.INITIATOR_WAITING:
-                # Received <- e, ee, s, es
-                if len(message) < 64:
-                    self.state = NoiseState.FAILED
-                    return False
-                
-                self._remote_ephemeral = message[:32]
-                encrypted_static = message[32:]
-                
-                # Perform DH: ee
-                self._do_dh(self._ephemeral_private, self._remote_ephemeral)
-                
-                # Decrypt remote static
-                self.remote_static = self._decrypt_handshake(encrypted_static)
-                
-                # Perform DH: es
-                if self.remote_static:
-                    self._do_dh(self._ephemeral_private, self.remote_static)
-                
-                return False  # Need to send final message
-        else:
-            if self.state == NoiseState.NONE:
-                # Received -> e
-                if len(message) < 32:
-                    self.state = NoiseState.FAILED
-                    return False
-                
-                self._remote_ephemeral = message[:32]
-                self.state = NoiseState.RESPONDER_WAITING
-                
-                # Perform DH: ee
-                self._do_dh(self._ephemeral_private, self._remote_ephemeral)
-                
-                return False
-            elif self.state == NoiseState.RESPONDER_WAITING:
-                # Received -> s, se
-                self.remote_static = self._decrypt_handshake(message)
-                
-                if self.remote_static:
-                    # Perform DH: se
-                    self._do_dh(self.static_keys.private_key, self._remote_ephemeral)
-                    self.state = NoiseState.ESTABLISHED
-                    self._derive_transport_keys()
-                    return True
-                
-                self.state = NoiseState.FAILED
-                return False
-        
-        return False
-    
-    def _do_dh(self, private: bytes, public: bytes):
-        """Perform DH and mix into chaining key."""
         try:
-            if CRYPTOGRAPHY_AVAILABLE:
-                priv_key = X25519PrivateKey.from_private_bytes(private)
-                pub_key = X25519PublicKey.from_public_bytes(public)
-                shared = priv_key.exchange(pub_key)
-            else:
-                shared = X25519.shared_secret(private, public)
-            
-            # HKDF-like mixing
-            self._chaining_key = sha256(self._chaining_key + shared)
-            self._handshake_key = sha256(self._chaining_key + b'\x01')
+            payload = self.noise.read_message(message)
+            if self.noise.handshake_finished:
+                self.state = NoiseState.ESTABLISHED
+                self._handshake_hash = self.noise.get_handshake_hash()
+                # Get remote static key
+                self.remote_static = self.noise.get_keypair(Keypair.REMOTE_STATIC)
+                return True
+            return False
         except Exception as e:
-            logger.error(f"DH operation failed: {e}")
+            logger.error(f"Noise handshake read error: {e}")
             self.state = NoiseState.FAILED
-    
-    def _encrypt_handshake(self, plaintext: bytes) -> bytes:
-        """Encrypt data during handshake (simplified)."""
-        # In production, use ChaCha20-Poly1305
-        key = self._handshake_key[:32]
-        nonce = sha256(self._handshake_key)[:12]
-        
-        # Simple XOR encryption (placeholder - use ChaCha20-Poly1305)
-        encrypted = bytes(a ^ b for a, b in zip(plaintext, key[:len(plaintext)]))
-        tag = sha256(key + encrypted)[:16]
-        
-        return encrypted + tag
-    
-    def _decrypt_handshake(self, ciphertext: bytes) -> Optional[bytes]:
-        """Decrypt data during handshake (simplified)."""
-        if len(ciphertext) < 48:  # 32 bytes data + 16 bytes tag
-            return None
-        
-        encrypted = ciphertext[:-16]
-        tag = ciphertext[-16:]
-        
-        key = self._handshake_key[:32]
-        
-        # Verify tag
-        expected_tag = sha256(key + encrypted)[:16]
-        if tag != expected_tag:
-            return None
-        
-        # Decrypt
-        plaintext = bytes(a ^ b for a, b in zip(encrypted, key[:len(encrypted)]))
-        return plaintext
-    
-    def _derive_transport_keys(self):
-        """Derive transport encryption keys after handshake."""
-        # Split chaining key for send/receive
-        self._send_cipher = sha256(self._chaining_key + b'send')
-        self._recv_cipher = sha256(self._chaining_key + b'recv')
-        
-        # Swap for responder
-        if not self.is_initiator:
-            self._send_cipher, self._recv_cipher = self._recv_cipher, self._send_cipher
-        
-        self._handshake_hash = sha256(self._chaining_key)
+            return False
     
     def encrypt(self, plaintext: bytes) -> bytes:
         """Encrypt message after handshake."""
         if self.state != NoiseState.ESTABLISHED:
             raise ValueError("Handshake not complete")
         
-        if NOISE_AVAILABLE:
-            try:
-                return self.noise.encrypt(plaintext)
-            except Exception as e:
-                logger.error(f"Noise encrypt error: {e}")
-                raise
-        else:
-            return self._manual_encrypt(plaintext)
+        try:
+            return self.noise.encrypt(plaintext)
+        except Exception as e:
+            logger.error(f"Noise encrypt error: {e}")
+            raise
     
     def decrypt(self, ciphertext: bytes) -> bytes:
         """Decrypt message after handshake."""
         if self.state != NoiseState.ESTABLISHED:
             raise ValueError("Handshake not complete")
         
-        if NOISE_AVAILABLE:
-            try:
-                return self.noise.decrypt(ciphertext)
-            except Exception as e:
-                logger.error(f"Noise decrypt error: {e}")
-                raise
-        else:
-            return self._manual_decrypt(ciphertext)
-    
-    def _manual_encrypt(self, plaintext: bytes) -> bytes:
-        """Manual encryption (simplified ChaCha20-Poly1305 placeholder)."""
-        # In production, use proper ChaCha20-Poly1305
-        nonce = os.urandom(12)
-        
-        # Simple XOR (placeholder)
-        key_stream = sha256(self._send_cipher + nonce)
-        encrypted = bytearray()
-        for i, byte in enumerate(plaintext):
-            key_byte = key_stream[i % 32]
-            encrypted.append(byte ^ key_byte)
-        
-        # Tag
-        tag = sha256(self._send_cipher + nonce + bytes(encrypted))[:16]
-        
-        # Rotate key
-        self._send_cipher = sha256(self._send_cipher + b'rotate')
-        
-        return nonce + bytes(encrypted) + tag
-    
-    def _manual_decrypt(self, ciphertext: bytes) -> bytes:
-        """Manual decryption (simplified)."""
-        if len(ciphertext) < 28:  # 12 nonce + 16 tag minimum
-            raise ValueError("Ciphertext too short")
-        
-        nonce = ciphertext[:12]
-        tag = ciphertext[-16:]
-        encrypted = ciphertext[12:-16]
-        
-        # Verify tag
-        expected_tag = sha256(self._recv_cipher + nonce + encrypted)[:16]
-        if tag != expected_tag:
-            raise ValueError("Authentication failed")
-        
-        # Decrypt
-        key_stream = sha256(self._recv_cipher + nonce)
-        plaintext = bytearray()
-        for i, byte in enumerate(encrypted):
-            key_byte = key_stream[i % 32]
-            plaintext.append(byte ^ key_byte)
-        
-        # Rotate key
-        self._recv_cipher = sha256(self._recv_cipher + b'rotate')
-        
-        return bytes(plaintext)
+        try:
+            return self.noise.decrypt(ciphertext)
+        except Exception as e:
+            logger.error(f"Noise decrypt error: {e}")
+            raise
     
     @property
     def is_established(self) -> bool:

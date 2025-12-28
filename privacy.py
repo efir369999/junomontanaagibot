@@ -1801,6 +1801,9 @@ class RingCT:
         
         Returns (input, blinding_factor)
         """
+        if not getattr(__import__("tiered_privacy"), "EXPERIMENTAL_PRIVACY_ENABLED", False):
+            raise PrivacyError("RingCT creation is disabled: set POT_ENABLE_EXPERIMENTAL_PRIVACY=1 to enable (unsafe).")
+
         if len(ring) < 2:
             raise PrivacyError("Ring must have at least 2 members")
         if real_index < 0 or real_index >= len(ring):
@@ -1841,6 +1844,9 @@ class RingCT:
         
         Returns (output, blinding_factor)
         """
+        if not getattr(__import__("tiered_privacy"), "EXPERIMENTAL_PRIVACY_ENABLED", False):
+            raise PrivacyError("RingCT creation is disabled: set POT_ENABLE_EXPERIMENTAL_PRIVACY=1 to enable (unsafe).")
+
         # Create stealth output
         stealth_out, tx_secret = StealthAddress.create_output(
             recipient_view_public,

@@ -13,6 +13,7 @@ Tiers:
 Time is the ultimate proof.
 """
 
+import os
 import struct
 import secrets
 import logging
@@ -31,6 +32,11 @@ from privacy import (
 from config import PROTOCOL
 
 logger = logging.getLogger("proof_of_time.tiered_privacy")
+
+# Experimental privacy (T2/T3) is disabled by default because current
+# Bulletproof/LSAG implementations are not production-grade. Enable only if
+# you fully understand the risks and provide audited crypto backends.
+EXPERIMENTAL_PRIVACY_ENABLED = os.getenv("POT_ENABLE_EXPERIMENTAL_PRIVACY", "0") == "1"
 
 
 # ============================================================================
@@ -599,6 +605,9 @@ class TieredTransactionBuilder:
         
         Returns (builder, blinding_factor) for balance verification.
         """
+        if not EXPERIMENTAL_PRIVACY_ENABLED:
+            raise ValueError("Confidential outputs (T2) are disabled: set POT_ENABLE_EXPERIMENTAL_PRIVACY=1 to enable (unsafe).")
+
         if blinding is None:
             blinding = Ed25519Point.scalar_random()
         
@@ -649,6 +658,9 @@ class TieredTransactionBuilder:
         Uses LSAG signature with key image for double-spend prevention.
         Default ring size = 11 (1 real + 10 decoys).
         """
+        if not EXPERIMENTAL_PRIVACY_ENABLED:
+            raise ValueError("Ring inputs (T3) are disabled: set POT_ENABLE_EXPERIMENTAL_PRIVACY=1 to enable (unsafe).")
+
         # Build ring from outputs
         ring = []
         real_index = secrets.randbelow(len(decoy_outputs) + 1)
@@ -696,9 +708,10 @@ class TieredTransactionBuilder:
         amount: int
     ) -> Tuple['TieredTransactionBuilder', bytes]:
         """Add T3 (ring) output - same as T2 but marked as T3."""
-        builder, blinding = self.add_confidential_output(
-            view_public, spend_public, amount
-        )
+        if not EXPERIMENTAL_PRIVACY_ENABLED:
+            raise ValueError("Ring outputs (T3) are disabled: set POT_ENABLE_EXPERIMENTAL_PRIVACY=1 to enable (unsafe).")
+
+        builder, blinding = self.add_confidential_output(view_public, spend_public, amount)
         
         # Change tier to T3
         builder.outputs[-1].tier = PrivacyTier.T3_RING
@@ -813,6 +826,15 @@ class TierValidator:
         """
         if spent_key_images is None:
             spent_key_images = set()
+        
+        # Reject confidential/ring tiers unless explicitly enabled
+        if not EXPERIMENTAL_PRIVACY_ENABLED:
+            for i, inp in enumerate(tx.inputs):
+                if inp.tier in (PrivacyTier.T2_CONFIDENTIAL, PrivacyTier.T3_RING):
+                    return False, f"Experimental privacy disabled: input {i} is {inp.tier.name}"
+            for i, out in enumerate(tx.outputs):
+                if out.tier in (PrivacyTier.T2_CONFIDENTIAL, PrivacyTier.T3_RING):
+                    return False, f"Experimental privacy disabled: output {i} is {out.tier.name}"
         
         # Validate tier rules
         valid, reason = tx.validate_tier_rules()
