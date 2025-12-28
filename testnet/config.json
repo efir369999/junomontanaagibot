@@ -1,0 +1,61 @@
+{
+  "network": {
+    "name": "pot-testnet-1",
+    "chain_id": 1001,
+    "version": "2.0.0"
+  },
+  "consensus": {
+    "block_interval_seconds": 60,
+    "vdf_iterations": 100000,
+    "vrf_threshold_percent": 50,
+    "min_validators": 3,
+    "max_validators": 100
+  },
+  "genesis": {
+    "timestamp": 0,
+    "initial_supply": 1000000000,
+    "founder_allocation": 0.10,
+    "testnet_faucet": 0.20,
+    "validator_rewards_pool": 0.70
+  },
+  "weights": {
+    "time": 0.60,
+    "space": 0.20,
+    "reputation": 0.20
+  },
+  "adonis": {
+    "enabled": true,
+    "vouch_rate_limit": 10,
+    "penalty_equivocation_days": 180,
+    "penalty_invalid_vdf_days": 30,
+    "penalty_invalid_vrf_days": 14
+  },
+  "privacy": {
+    "tier_0_public": true,
+    "tier_1_stealth": false,
+    "tier_2_confidential": false,
+    "tier_3_ring": false
+  },
+  "p2p": {
+    "default_port": 9333,
+    "rpc_port": 9334,
+    "max_peers": 50,
+    "bootstrap_nodes": [
+      "/dns4/seed1.proofoftime.org/tcp/9333",
+      "/dns4/seed2.proofoftime.org/tcp/9333",
+      "/dns4/seed3.proofoftime.org/tcp/9333"
+    ]
+  },
+  "storage": {
+    "data_dir": "./data",
+    "db_path": "./data/blockchain.db",
+    "dag_path": "./data/dag.db",
+    "checkpoint_interval": 1000
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "./logs/node.log",
+    "max_size_mb": 100,
+    "backup_count": 5
+  }
+}
