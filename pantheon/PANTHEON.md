@@ -33,7 +33,7 @@
 
 | # | God | Domain | Files | Lines | Status |
 |---|-----|--------|-------|-------|--------|
-| 1 | **Chronos** | Time Proofs | crypto.py, vdf_fast.py, poh.py | 5,400 | Active |
+| 1 | **Chronos** | Time Proofs | poh.py, vdf_fast.py | 800 | Active |
 | 2 | **Adonis** | Reputation | adonis.py | 2,000 | Active |
 | 3 | **Hermes** | P2P Network | network.py | 2,300 | Active |
 | 4 | **Hades** | DAG Storage | database.py, dag_storage.py, dag.py | 3,100 | Active |
@@ -78,7 +78,7 @@ from pantheon.adonis import AdonisEngine, ReputationEvent
 ### Hermes — Network
 
 ```python
-from pantheon.hermes import P2PNetwork
+from pantheon.hermes import P2PNode
 ```
 
 - Noise Protocol XX encryption
@@ -88,7 +88,7 @@ from pantheon.hermes import P2PNetwork
 ### Hades — Storage
 
 ```python
-from pantheon.hades import BlockDatabase, DAGStorage
+from pantheon.hades import BlockchainDB, DAGStorage
 ```
 
 - SQLite persistent storage
