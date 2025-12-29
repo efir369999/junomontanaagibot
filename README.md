@@ -1,136 +1,109 @@
-# Proof of Time
+# Time
 
-**Consensus on time. Not money.**
-
----
-
-## Core Idea
-
-Time is the only resource that cannot be bought, accelerated, or transferred. Run a node for 180 days = maximum influence. Your capital doesn't matter.
-
-```
-1Ɉ = 1 second
-Emission: 21,000,000 minutes (~132 years)
-Block: 10 minutes
-Halving: every 210,000 blocks
-```
+A peer-to-peer electronic cash system based on time.
 
 ---
 
-## How It Works
+## Two Things
 
-### Dual-Layer Consensus
+**Proof of Time** — the consensus protocol. VDF, Adonis, DAG.
+
+**Time (Ɉ)** — the currency. 1 Ɉ = 1 second.
+
+---
+
+## The Currency: Ɉ
 
 ```
-Layer 1: PoH (Proof of History)
-├─ 1 block/second
-├─ Sequential hash chain
-└─ Fast transactions
-
-Layer 2: PoT (Proof of Time)
-├─ Checkpoint every 10 minutes
-├─ Wesolowski VDF (1M iterations)
-└─ Finality — cannot be reverted
+Symbol: Ɉ
+Unit: 1 Ɉ = 1 second
+Supply: 1,260,000,000 Ɉ (21 million minutes)
+Block reward: 50 min → 25 min → 12.5 min → ...
+Halving: every 210,000 blocks (~4 years)
+Emission: 132 years
 ```
+
+**Temporal Compression:** Reward ratio converges from 5:1 to 1:1. Inflation asymptotically approaches zero. Nash's Ideal Money realized.
+
+---
+
+## The Protocol: Proof of Time
+
+Consensus based on time, not capital. Time cannot be bought, accelerated, or transferred.
+
+### Dual Layer
+
+**Layer 1 — Proof of History.** Sequential SHA-256 chain. Transaction ordering.
+
+**Layer 2 — Proof of Time.** VDF checkpoints every 10 minutes. Finality.
 
 ### Leader Selection
 
-**ECVRF** (Verifiable Random Function) selects block producer proportionally to node weight.
+ECVRF selects block producer. Probability proportional to Adonis score.
 
-### Node Weight: The Five Fingers of Adonis
+### Adonis Score
 
-```
-P(i) = Adonis(i) / Σ Adonis(all)
-```
+Five dimensions. All saturate.
 
-Five dimensions — like fingers on a hand:
+| Dimension | Weight | Saturation |
+|-----------|--------|------------|
+| TIME | 50% | 180 days uptime |
+| INTEGRITY | 20% | No violations |
+| STORAGE | 15% | Full chain history |
+| GEOGRAPHY | 10% | Location diversity |
+| HANDSHAKE | 5% | Veteran trust bonds |
 
-| Finger | Dimension | Weight | What it measures |
-|--------|-----------|--------|------------------|
-| 👍 Thumb | **TIME** | **50%** | Continuous uptime (saturates at 180 days) |
-| ☝️ Index | INTEGRITY | 20% | No violations, valid proofs |
-| 🖕 Middle | STORAGE | 15% | Chain history (saturates at 100%) |
-| 💍 Ring | GEOGRAPHY | 10% | Country + city diversity |
-| 🤙 Pinky | HANDSHAKE | 5% | Mutual trust between veterans |
-
-**TIME is the thumb.** Makes the hand work. 50% weight — this is Proof of Time.
-
-**INTEGRITY has double protection**: 20% weight + 180-day quarantine for equivocation.
-
-**GEOGRAPHY rewards decentralization**: First node from new country +0.25, new city +0.15.
-
-**HANDSHAKE is elite bonus**: Unlocks when 4 fingers saturated. Two veterans from different countries shake hands = cryptographic trust. Anti-sybil by design.
+180 days = maximum influence. Capital irrelevant.
 
 ### DAG
 
-Each block references 1-8 parents. PHANTOM-PoT algorithm for ordering. Horizontal TPS scaling.
+1-8 parent references per block. PHANTOM ordering. Horizontal scaling.
 
 ---
 
-## Architecture: Pantheon
+## Privacy
 
-12 modules (Greek gods):
-
-| # | God | Function |
-|---|-----|----------|
-| 1 | **Chronos** | VDF, PoH, time proofs |
-| 2 | **Adonis** | 5-finger reputation |
-| 3 | **Hermes** | P2P, Noise Protocol |
-| 4 | **Hades** | DAG, SQLite storage |
-| 5 | **Athena** | VRF consensus |
-| 6 | **Prometheus** | Ed25519, ECVRF, RSA |
-| 7 | **Mnemosyne** | Mempool |
-| 8 | **Plutus** | Wallet, UTXO |
-| 9 | **Nyx** | Privacy (LSAG, stealth) |
-| 10 | **Themis** | Block validation |
-| 11 | **Iris** | RPC, WebSocket |
-| 12 | **Ananke** | Governance |
+| Tier | Hidden | Fee |
+|------|--------|-----|
+| T0 | Nothing | 1× |
+| T1 | Receiver | 2× |
+| T2 | + Amount | 5× |
+| T3 | + Sender | 10× |
 
 ---
 
-## Privacy: 4 Tiers
+## Architecture
 
-| Tier | Hidden | Size | Fee |
-|------|--------|------|-----|
-| T0 | Nothing | 250 B | 1× |
-| T1 | Receiver | 400 B | 2× |
-| T2 | + Amounts | 1.2 KB | 5× |
-| T3 | Full RingCT | 2.5 KB | 10× |
+12 modules (Pantheon):
 
-T2/T3 experimental. Enable: `POT_ENABLE_EXPERIMENTAL_PRIVACY=1`
+Chronos (VDF), Adonis (reputation), Hermes (P2P), Hades (storage), Athena (consensus), Prometheus (crypto), Mnemosyne (mempool), Plutus (wallet), Nyx (privacy), Themis (validation), Iris (RPC), Ananke (governance).
 
 ---
 
 ## Run
 
 ```bash
-# Dev
 pip install pynacl
-python pot.py          # Dashboard with metrics
-python node.py --run   # Run node
-
-# Production (Linux)
-curl -sSL https://raw.githubusercontent.com/afgrouptime/proofoftime/main/install.sh | bash
-```
-
-**Environment:**
-```bash
-POT_DATA_DIR=/path/to/data
-POT_NETWORK=TESTNET        # MAINNET, TESTNET, REGTEST
-POT_PORT=8333              # P2P
-POT_RPC_PORT=8332          # API
-POT_ALLOW_UNSAFE=1         # Testnet features
+python node.py --run
 ```
 
 ---
 
-## Why Not PoW/PoS
+## Documentation
 
-| | Bitcoin | Ethereum | Proof of Time |
-|---|---------|----------|---------------|
-| Consensus | PoW | PoS | VDF + Time |
-| Influence | Money→ASIC | Money→Stake | Time (can't buy) |
-| Entry barrier | High | Medium | Low |
+| Document | Content |
+|----------|---------|
+| Time_v1.0.pdf | Whitepaper. Nash's Ideal Money. Temporal Compression. |
+| ProofOfTime_v1.pdf | Technical specification. VDF. Adonis. DAG. |
+
+---
+
+## Comparison
+
+| | Bitcoin | Ethereum | Time |
+|---|---------|----------|------|
+| Consensus | PoW | PoS | VDF |
+| Influence | Hardware | Stake | Time |
 | 51% attack | $20B | $10B | N × 180 days |
 
 ---
@@ -141,6 +114,6 @@ alejandromontana@tutamail.com
 
 ---
 
-*In time, we are all equal.*
+Time is priceless. Now it has a price.
 
 **Ɉ**
