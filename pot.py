@@ -3,12 +3,16 @@
 Proof of Time - Pantheon Carousel
 
 12 gods, 12 parameters each.
-Carousel: every second shows param #N from all 12 gods.
+Carousel synced to genesis: param# = (unix_time - genesis) % 12
+All nodes show same param at same time.
 """
 
 import sys
 import time
 from datetime import datetime
+
+# Genesis timestamp (Dec 28, 2025 00:00:00 UTC)
+GENESIS_TIMESTAMP = 1766966400
 
 # 12 Gods with exactly 12 parameters each
 PANTHEON = {
@@ -26,20 +30,25 @@ PANTHEON = {
     12: {"name": "ANANKE",     "params": ["voting=7days", "quorum=10%", "threshold=67%", "proposal=1POT", "deposit=100POT", "veto=33%", "execute=auto", "delay=24h", "cancel=no", "upgrade=fork", "emergency=3day", "status=PLANNED"]},
 }
 
+def get_synced_param():
+    """Get param index synced to genesis. All nodes same param at same time."""
+    elapsed = int(time.time()) - GENESIS_TIMESTAMP
+    return elapsed % 12
+
 def carousel():
     """
-    Carousel: each second prints param #N from all 12 gods.
-    Line format: HH:MM:SS [N] god1_param, god2_param, ..., god12_param
+    Carousel synced to genesis timestamp.
+    param# = (unix_time - genesis) % 12
+    All nodes display same param at same second.
     """
-    print("PROOF OF TIME CAROUSEL")
-    print("Param# rotates 1-12, showing that param from all 12 gods")
-    print("Ctrl+C to stop")
+    print("PROOF OF TIME CAROUSEL (synced to genesis)")
+    print(f"Genesis: {GENESIS_TIMESTAMP} | Ctrl+C to stop")
     print()
-
-    param_num = 0  # 0-11 index
 
     try:
         while True:
+            now = int(time.time())
+            param_num = (now - GENESIS_TIMESTAMP) % 12
             ts = datetime.now().strftime("%H:%M:%S")
 
             # Collect param #N from all 12 gods
@@ -47,17 +56,13 @@ def carousel():
             for god_num in range(1, 13):
                 god = PANTHEON[god_num]
                 param = god["params"][param_num]
-                # Format: GOD:value
                 values.append(f"{god['name'][:3]}:{param}")
 
-            # Print line: timestamp [param#] all values
             line = ", ".join(values)
             print(f"{ts} [{param_num+1:2}] {line}")
 
-            # Next param (carousel)
-            param_num = (param_num + 1) % 12
-
-            time.sleep(1)
+            # Wait until next second boundary
+            time.sleep(1 - (time.time() % 1))
 
     except KeyboardInterrupt:
         print("\nStopped.")
@@ -83,14 +88,14 @@ def print_all():
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Pantheon Carousel")
-    parser.add_argument("--run", "-r", action="store_true", help="Run carousel (1 line/sec)")
+    parser = argparse.ArgumentParser(description="Pantheon Carousel (synced to genesis)")
+    parser.add_argument("--static", "-s", action="store_true", help="Static view (all 12 rows once)")
     args = parser.parse_args()
 
-    if args.run:
-        carousel()
-    else:
+    if args.static:
         print_all()
+    else:
+        carousel()  # Default: run synced carousel
 
 if __name__ == "__main__":
     main()
