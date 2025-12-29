@@ -34,8 +34,8 @@ class TestConsensusStress(unittest.TestCase):
     
     def test_mass_node_registration(self):
         """Register many nodes concurrently."""
-        from consensus import ConsensusEngine
-        from crypto import Ed25519
+        from pantheon.athena.consensus import ConsensusEngine
+        from pantheon.prometheus.crypto import Ed25519
         
         engine = ConsensusEngine()
         engine.initialize()
@@ -67,8 +67,8 @@ class TestConsensusStress(unittest.TestCase):
     
     def test_probability_computation_under_load(self):
         """Compute probabilities for many nodes."""
-        from consensus import ConsensusEngine, NodeState, NodeStatus
-        from crypto import Ed25519
+        from pantheon.athena.consensus import ConsensusEngine, NodeState, NodeStatus
+        from pantheon.prometheus.crypto import Ed25519
         
         engine = ConsensusEngine()
         engine.initialize()
@@ -99,7 +99,7 @@ class TestConsensusStress(unittest.TestCase):
     
     def test_slashing_under_concurrent_reports(self):
         """Process many slashing reports concurrently."""
-        from consensus import SlashingManager, SlashingEvidence, SlashingCondition
+        from pantheon.athena.consensus import SlashingManager, SlashingEvidence, SlashingCondition
         
         manager = SlashingManager()
         errors = []
@@ -139,9 +139,9 @@ class TestDatabaseStress(unittest.TestCase):
     
     def test_concurrent_block_writes(self):
         """Write many blocks concurrently."""
-        from database import BlockchainDB, StorageConfig
-        from structures import Block, BlockHeader, Transaction, TxType, TxOutput
-        from crypto import sha256
+        from pantheon.hades.database import BlockchainDB, StorageConfig
+        from pantheon.themis.structures import Block, BlockHeader, Transaction, TxType, TxOutput
+        from pantheon.prometheus.crypto import sha256
         
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "stress_test.db")
@@ -198,7 +198,7 @@ class TestDatabaseStress(unittest.TestCase):
     
     def test_key_image_check_performance(self):
         """Check key image lookup performance."""
-        from database import BlockchainDB, StorageConfig
+        from pantheon.hades.database import BlockchainDB, StorageConfig
         
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "ki_test.db")
@@ -232,9 +232,9 @@ class TestDatabaseStress(unittest.TestCase):
     
     def test_output_selection_performance(self):
         """Test random output selection performance."""
-        from database import BlockchainDB, StorageConfig
-        from structures import create_genesis_block, Block, Transaction, TxType, TxOutput
-        from crypto import sha256
+        from pantheon.hades.database import BlockchainDB, StorageConfig
+        from pantheon.themis.structures import create_genesis_block, Block, Transaction, TxType, TxOutput
+        from pantheon.prometheus.crypto import sha256
         
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "output_test.db")
@@ -283,7 +283,7 @@ class TestNetworkStress(unittest.TestCase):
     
     def test_message_serialization_performance(self):
         """Test message serialization performance using structures."""
-        from structures import Block, BlockHeader, Transaction, TxType
+        from pantheon.themis.structures import Block, BlockHeader, Transaction, TxType
         
         # Create test blocks
         blocks = []
@@ -309,7 +309,7 @@ class TestNetworkStress(unittest.TestCase):
     
     def test_eclipse_protection_under_load(self):
         """Test Eclipse protection with many connection attempts."""
-        from network import EclipseProtection
+        from pantheon.hermes.network import EclipseProtection
         
         eclipse = EclipseProtection()
         
@@ -333,7 +333,7 @@ class TestNetworkStress(unittest.TestCase):
     
     def test_ban_manager_under_load(self):
         """Test ban manager with many violations."""
-        from network import BanManager
+        from pantheon.hermes.network import BanManager
         
         ban_manager = BanManager()
         
@@ -358,7 +358,7 @@ class TestCryptoStress(unittest.TestCase):
     
     def test_signature_verification_batch(self):
         """Test batch signature verification performance."""
-        from crypto import Ed25519
+        from pantheon.prometheus.crypto import Ed25519
         
         # Generate test data
         signatures = []
@@ -379,7 +379,7 @@ class TestCryptoStress(unittest.TestCase):
     
     def test_hash_computation_performance(self):
         """Test hash computation performance."""
-        from crypto import sha256, sha256d
+        from pantheon.prometheus.crypto import sha256, sha256d
         
         data = secrets.token_bytes(1000)
         
@@ -399,7 +399,7 @@ class TestCryptoStress(unittest.TestCase):
     
     def test_merkle_root_large_tree(self):
         """Test Merkle root computation for large trees."""
-        from crypto import MerkleTree, sha256
+        from pantheon.prometheus.crypto import MerkleTree, sha256
         
         # Generate many transaction hashes
         tx_hashes = [sha256(secrets.token_bytes(32)) for _ in range(10000)]
@@ -418,7 +418,7 @@ class TestPrivacyStress(unittest.TestCase):
     
     def test_ring_signature_large_ring(self):
         """Test ring signature with large ring."""
-        from privacy import LSAG, Ed25519Point
+        from pantheon.nyx.privacy import LSAG, Ed25519Point
         
         # Generate large ring
         ring_size = 64
@@ -452,7 +452,7 @@ class TestPrivacyStress(unittest.TestCase):
     
     def test_stealth_address_scanning_performance(self):
         """Test stealth address scanning performance."""
-        from privacy import StealthKeys, StealthAddress
+        from pantheon.nyx.privacy import StealthKeys, StealthAddress
         
         receiver_keys = StealthKeys.generate()
         
@@ -493,7 +493,7 @@ class TestMemoryPressure(unittest.TestCase):
     
     def test_large_transaction_handling(self):
         """Test handling of transaction with many inputs/outputs."""
-        from structures import Transaction, TxInput, TxOutput, TxType
+        from pantheon.themis.structures import Transaction, TxInput, TxOutput, TxType
         
         # Create transaction with many inputs/outputs (but within limits)
         tx = Transaction(tx_type=TxType.STANDARD)
@@ -525,7 +525,7 @@ class TestMemoryPressure(unittest.TestCase):
     
     def test_vdf_checkpoint_memory_limits(self):
         """Test VDF checkpoint memory limits are enforced."""
-        from crypto import WesolowskiVDF, VDFCheckpoint, sha256
+        from pantheon.prometheus.crypto import WesolowskiVDF, VDFCheckpoint, sha256
         
         vdf = WesolowskiVDF(2048, auto_calibrate=False)
         

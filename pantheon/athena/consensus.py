@@ -1256,7 +1256,7 @@ class SlashingManager:
         2. VRF proofs computed with wrong input
         3. Reused VRF proofs from previous blocks
         """
-        from crypto import ECVRF, VRFOutput
+        from pantheon.prometheus.crypto import ECVRF, VRFOutput
         
         vrf_output = VRFOutput(
             beta=block.header.vrf_output,

@@ -280,7 +280,7 @@ class DAGBlock:
     
     def serialize(self) -> bytes:
         """Serialize DAG block."""
-        from structures import write_varint, write_bytes
+        from pantheon.themis.structures import write_varint, write_bytes
         
         data = bytearray()
         
@@ -298,7 +298,7 @@ class DAGBlock:
     @classmethod
     def deserialize(cls, data: bytes, offset: int = 0) -> Tuple['DAGBlock', int]:
         """Deserialize DAG block."""
-        from structures import read_varint, read_bytes, Transaction
+        from pantheon.themis.structures import read_varint, read_bytes, Transaction
         
         # Header
         header_bytes, offset = read_bytes(data, offset)
@@ -970,7 +970,7 @@ class DAGConsensusEngine:
         
         Follows PHANTOM block ordering, then transaction order within blocks.
         """
-        from structures import Transaction
+        from pantheon.themis.structures import Transaction
         
         ordered_txs = []
         seen_txids = set()
@@ -1056,7 +1056,7 @@ class DAGBlockProducer:
         """
         Create a new DAG block.
         """
-        from structures import MerkleTree
+        from pantheon.themis.structures import MerkleTree
         
         # Check eligibility
         if not self.engine.can_produce_block(self.pk):

@@ -297,7 +297,7 @@ class DAGStorage:
         """
         Store DAG block with parent relationships.
         """
-        from dag import DAGBlock
+        from pantheon.hades.dag import DAGBlock
         
         block_hash = block.block_hash
         
@@ -400,7 +400,7 @@ class DAGStorage:
     
     def get_dag_block(self, block_hash: bytes):
         """Get DAG block by hash."""
-        from dag import DAGBlock
+        from pantheon.hades.dag import DAGBlock
         
         # Check hot cache
         cached = self.block_cache.get(block_hash)
@@ -567,7 +567,7 @@ class DAGStorage:
     
     def get_mempool_by_fee(self, limit: int = 1000) -> List:
         """Get transactions from mempool ordered by fee rate."""
-        from structures import Transaction
+        from pantheon.themis.structures import Transaction
         
         with self._connection() as conn:
             cursor = conn.cursor()

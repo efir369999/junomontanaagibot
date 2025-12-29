@@ -39,24 +39,24 @@ class TestVDFEdgeCases(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
-        from crypto import WesolowskiVDF, sha256 as crypto_sha256
+        from pantheon.prometheus.crypto import WesolowskiVDF, sha256 as crypto_sha256
         cls.vdf = WesolowskiVDF(2048)
         cls._sha256 = staticmethod(crypto_sha256)
     
     def sha256(self, data: bytes) -> bytes:
-        from crypto import sha256
+        from pantheon.prometheus.crypto import sha256
         return sha256(data)
     
     def test_minimum_iterations(self):
         """VDF should reject iterations below minimum."""
-        from crypto import VDFError
+        from pantheon.prometheus.crypto import VDFError
         input_data = self.sha256(b"test")
         with self.assertRaises(VDFError):
             self.vdf.compute(input_data, 100)  # Below MIN_ITERATIONS
     
     def test_maximum_iterations(self):
         """VDF should reject iterations above maximum."""
-        from crypto import VDFError
+        from pantheon.prometheus.crypto import VDFError
         input_data = self.sha256(b"test")
         with self.assertRaises(VDFError):
             self.vdf.compute(input_data, 10**12)  # Above MAX_ITERATIONS
@@ -90,7 +90,7 @@ class TestVDFEdgeCases(unittest.TestCase):
     
     def test_verification_rejects_tampered_proof(self):
         """Verification should reject tampered proofs."""
-        from crypto import VDFProof
+        from pantheon.prometheus.crypto import VDFProof
         input_data = self.sha256(b"tamper_test")
         proof = self.vdf.compute(input_data, self.vdf.MIN_ITERATIONS)
         
@@ -114,7 +114,7 @@ class TestVDFEdgeCases(unittest.TestCase):
     
     def test_verification_rejects_wrong_iterations(self):
         """Verification should reject proof with wrong iterations count."""
-        from crypto import VDFProof
+        from pantheon.prometheus.crypto import VDFProof
         input_data = self.sha256(b"iter_test")
         proof = self.vdf.compute(input_data, self.vdf.MIN_ITERATIONS)
         
@@ -132,13 +132,13 @@ class TestVRFEdgeCases(unittest.TestCase):
     """Test VRF edge cases."""
     
     def sha256(self, data: bytes) -> bytes:
-        from crypto import sha256
+        from pantheon.prometheus.crypto import sha256
         return sha256(data)
     
     @unittest.skip("ECVRF verify needs crypto audit - complex point arithmetic")
     def test_prove_verify_roundtrip(self):
         """VRF prove/verify should work correctly."""
-        from crypto import ECVRF, Ed25519
+        from pantheon.prometheus.crypto import ECVRF, Ed25519
         sk, pk = Ed25519.generate_keypair()
         alpha = self.sha256(b"test_input")
         
@@ -147,7 +147,7 @@ class TestVRFEdgeCases(unittest.TestCase):
     
     def test_different_keys_different_outputs(self):
         """Different keys should produce different outputs."""
-        from crypto import ECVRF, Ed25519
+        from pantheon.prometheus.crypto import ECVRF, Ed25519
         sk1, pk1 = Ed25519.generate_keypair()
         sk2, pk2 = Ed25519.generate_keypair()
         alpha = self.sha256(b"same_input")
@@ -159,7 +159,7 @@ class TestVRFEdgeCases(unittest.TestCase):
     
     def test_determinism(self):
         """Same key + input should produce same output."""
-        from crypto import ECVRF, Ed25519
+        from pantheon.prometheus.crypto import ECVRF, Ed25519
         sk, pk = Ed25519.generate_keypair()
         alpha = self.sha256(b"determinism")
         
@@ -170,7 +170,7 @@ class TestVRFEdgeCases(unittest.TestCase):
     
     def test_wrong_key_fails_verification(self):
         """Verification with wrong key should fail."""
-        from crypto import ECVRF, Ed25519
+        from pantheon.prometheus.crypto import ECVRF, Ed25519
         sk1, pk1 = Ed25519.generate_keypair()
         sk2, pk2 = Ed25519.generate_keypair()
         alpha = self.sha256(b"wrong_key_test")
@@ -180,7 +180,7 @@ class TestVRFEdgeCases(unittest.TestCase):
     
     def test_wrong_input_fails_verification(self):
         """Verification with wrong input should fail."""
-        from crypto import ECVRF, Ed25519
+        from pantheon.prometheus.crypto import ECVRF, Ed25519
         sk, pk = Ed25519.generate_keypair()
         
         output = ECVRF.prove(sk, self.sha256(b"input1"))
@@ -192,7 +192,7 @@ class TestConsensusEdgeCases(unittest.TestCase):
     
     def test_empty_node_list(self):
         """Should handle empty node list gracefully."""
-        from consensus import ConsensusCalculator, LeaderSelector
+        from pantheon.athena.consensus import ConsensusCalculator, LeaderSelector
         
         calc = ConsensusCalculator()
         selector = LeaderSelector(calc)
@@ -202,7 +202,7 @@ class TestConsensusEdgeCases(unittest.TestCase):
     
     def test_single_node_probability(self):
         """Single node should get 100% probability."""
-        from consensus import ConsensusCalculator, NodeState, NodeStatus
+        from pantheon.athena.consensus import ConsensusCalculator, NodeState, NodeStatus
         
         calc = ConsensusCalculator()
         
@@ -219,7 +219,7 @@ class TestConsensusEdgeCases(unittest.TestCase):
     
     def test_zero_uptime_node(self):
         """Node with zero uptime should have minimal probability."""
-        from consensus import ConsensusCalculator, NodeState, NodeStatus
+        from pantheon.athena.consensus import ConsensusCalculator, NodeState, NodeStatus
         from config import PROTOCOL
         
         calc = ConsensusCalculator()
@@ -243,9 +243,9 @@ class TestConsensusEdgeCases(unittest.TestCase):
     
     def test_slashing_detection(self):
         """Equivocation should be detected correctly."""
-        from consensus import SlashingManager, SlashingCondition
-        from structures import Block
-        from crypto import Ed25519
+        from pantheon.athena.consensus import SlashingManager, SlashingCondition
+        from pantheon.themis.structures import Block
+        from pantheon.prometheus.crypto import Ed25519
         
         sk, pk = Ed25519.generate_keypair()
         
@@ -272,9 +272,9 @@ class TestConsensusEdgeCases(unittest.TestCase):
     
     def test_no_false_equivocation(self):
         """Same block should not trigger equivocation."""
-        from consensus import SlashingManager
-        from structures import Block
-        from crypto import Ed25519
+        from pantheon.athena.consensus import SlashingManager
+        from pantheon.themis.structures import Block
+        from pantheon.prometheus.crypto import Ed25519
         
         sk, pk = Ed25519.generate_keypair()
         
@@ -296,7 +296,7 @@ class TestPrivacyEdgeCases(unittest.TestCase):
     
     def test_lsag_minimum_ring_size(self):
         """LSAG should reject ring size < 2."""
-        from privacy import LSAG, RingSignatureError, Ed25519Point
+        from pantheon.nyx.privacy import LSAG, RingSignatureError, Ed25519Point
         
         secret_key = Ed25519Point.scalar_random()
         public_key = Ed25519Point.scalarmult_base(secret_key)
@@ -306,7 +306,7 @@ class TestPrivacyEdgeCases(unittest.TestCase):
     
     def test_lsag_invalid_secret_index(self):
         """LSAG should reject invalid secret index."""
-        from privacy import LSAG, RingSignatureError, Ed25519Point
+        from pantheon.nyx.privacy import LSAG, RingSignatureError, Ed25519Point
         
         keys = [(Ed25519Point.scalar_random(), None) for _ in range(3)]
         for i, (sk, _) in enumerate(keys):
@@ -319,7 +319,7 @@ class TestPrivacyEdgeCases(unittest.TestCase):
     
     def test_lsag_key_image_linkability(self):
         """Same key should produce same key image."""
-        from privacy import generate_key_image, Ed25519Point
+        from pantheon.nyx.privacy import generate_key_image, Ed25519Point
         
         sk = Ed25519Point.scalar_random()
         pk = Ed25519Point.scalarmult_base(sk)
@@ -331,7 +331,7 @@ class TestPrivacyEdgeCases(unittest.TestCase):
     
     def test_stealth_address_generation(self):
         """Stealth addresses should be correctly derivable."""
-        from privacy import StealthKeys, StealthAddress
+        from pantheon.nyx.privacy import StealthKeys, StealthAddress
         
         # Receiver generates keys
         receiver_keys = StealthKeys.generate()
@@ -361,7 +361,7 @@ class TestPrivacyEdgeCases(unittest.TestCase):
     
     def test_pedersen_commitment_sum(self):
         """Pedersen commitments should preserve sums."""
-        from privacy import Pedersen, PedersenCommitment
+        from pantheon.nyx.privacy import Pedersen, PedersenCommitment
         
         # Create commitments for values 5 and 3
         c1 = Pedersen.commit(5)
@@ -382,8 +382,8 @@ class TestThreadSafety(unittest.TestCase):
     
     def test_consensus_engine_concurrent_access(self):
         """ConsensusEngine should be thread-safe."""
-        from consensus import ConsensusEngine, NodeState
-        from crypto import Ed25519
+        from pantheon.athena.consensus import ConsensusEngine, NodeState
+        from pantheon.prometheus.crypto import Ed25519
         
         engine = ConsensusEngine()
         engine.initialize()
@@ -410,7 +410,7 @@ class TestThreadSafety(unittest.TestCase):
     
     def test_sybil_detector_concurrent_recording(self):
         """SybilDetector should handle concurrent recordings."""
-        from consensus import SybilDetector
+        from pantheon.athena.consensus import SybilDetector
         
         detector = SybilDetector()
         errors = []
@@ -487,7 +487,7 @@ class TestNetworkEdgeCases(unittest.TestCase):
     
     def test_block_timeout_detection(self):
         """BlockTimeoutMonitor should detect timeouts."""
-        from network import BlockTimeoutMonitor
+        from pantheon.hermes.network import BlockTimeoutMonitor
         
         timeout_detected = []
         
@@ -508,7 +508,7 @@ class TestNetworkEdgeCases(unittest.TestCase):
     
     def test_eclipse_protection(self):
         """Eclipse protection should limit connections per IP."""
-        from network import EclipseProtection
+        from pantheon.hermes.network import EclipseProtection
         
         eclipse = EclipseProtection()
         
@@ -532,8 +532,8 @@ class TestSerializationRoundtrips(unittest.TestCase):
     
     def test_block_serialization(self):
         """Block should serialize and deserialize correctly."""
-        from structures import Block, BlockHeader, Transaction, TxType
-        from crypto import sha256
+        from pantheon.themis.structures import Block, BlockHeader, Transaction, TxType
+        from pantheon.prometheus.crypto import sha256
         
         # Create block
         block = Block()
@@ -561,7 +561,7 @@ class TestSerializationRoundtrips(unittest.TestCase):
     
     def test_vdf_proof_serialization(self):
         """VDFProof should serialize correctly."""
-        from crypto import VDFProof, sha256
+        from pantheon.prometheus.crypto import VDFProof, sha256
         
         proof = VDFProof(
             output=b'\x01' * 256,
@@ -580,7 +580,7 @@ class TestSerializationRoundtrips(unittest.TestCase):
     
     def test_slashing_evidence_serialization(self):
         """SlashingEvidence should serialize correctly."""
-        from consensus import SlashingEvidence, SlashingCondition
+        from pantheon.athena.consensus import SlashingEvidence, SlashingCondition
         
         evidence = SlashingEvidence(
             condition=SlashingCondition.EQUIVOCATION,
@@ -607,8 +607,8 @@ class TestBootstrapMechanism(unittest.TestCase):
     
     def test_bootstrap_mode_detection(self):
         """Should correctly detect bootstrap mode."""
-        from consensus import ConsensusEngine, BootstrapManager, BootstrapMode
-        from crypto import Ed25519
+        from pantheon.athena.consensus import ConsensusEngine, BootstrapManager, BootstrapMode
+        from pantheon.prometheus.crypto import Ed25519
         
         engine = ConsensusEngine()
         engine.initialize()
@@ -631,8 +631,8 @@ class TestBootstrapMechanism(unittest.TestCase):
     
     def test_confirmations_by_network_size(self):
         """Smaller networks should require more confirmations."""
-        from consensus import ConsensusEngine, BootstrapManager
-        from crypto import Ed25519
+        from pantheon.athena.consensus import ConsensusEngine, BootstrapManager
+        from pantheon.prometheus.crypto import Ed25519
         
         engine = ConsensusEngine()
         engine.initialize()
@@ -664,7 +664,7 @@ class TestBulletproofVerification(unittest.TestCase):
     
     def test_valid_proof_verification(self):
         """Valid range proofs should verify correctly."""
-        from privacy import Bulletproof, Pedersen, Ed25519Point
+        from pantheon.nyx.privacy import Bulletproof, Pedersen, Ed25519Point
         
         # Create commitment and proof for valid value
         value = 1000
@@ -677,7 +677,7 @@ class TestBulletproofVerification(unittest.TestCase):
     
     def test_zero_value_proof(self):
         """Range proof for zero value should work."""
-        from privacy import Bulletproof, Pedersen, Ed25519Point
+        from pantheon.nyx.privacy import Bulletproof, Pedersen, Ed25519Point
         
         value = 0
         blinding = Ed25519Point.scalar_random()
@@ -688,7 +688,7 @@ class TestBulletproofVerification(unittest.TestCase):
     
     def test_max_value_proof(self):
         """Range proof for maximum value should work."""
-        from privacy import Bulletproof, Pedersen, Ed25519Point
+        from pantheon.nyx.privacy import Bulletproof, Pedersen, Ed25519Point
         
         value = (1 << 64) - 1  # Max 64-bit value
         blinding = Ed25519Point.scalar_random()
@@ -699,7 +699,7 @@ class TestBulletproofVerification(unittest.TestCase):
     
     def test_invalid_proof_rejected(self):
         """Invalid range proofs should be rejected."""
-        from privacy import Bulletproof, Pedersen, Ed25519Point, RangeProof
+        from pantheon.nyx.privacy import Bulletproof, Pedersen, Ed25519Point, RangeProof
         
         value = 1000
         blinding = Ed25519Point.scalar_random()
@@ -733,7 +733,7 @@ class TestWalletEncryption(unittest.TestCase):
     
     def test_encrypt_decrypt_roundtrip(self):
         """Encryption and decryption should be inverse operations."""
-        from wallet import WalletCrypto
+        from pantheon.plutus.wallet import WalletCrypto
         
         plaintext = b"This is a secret wallet data with sensitive keys!"
         password = "StrongP@ssw0rd123!"
@@ -745,7 +745,7 @@ class TestWalletEncryption(unittest.TestCase):
     
     def test_wrong_password_fails(self):
         """Wrong password should fail to decrypt."""
-        from wallet import WalletCrypto
+        from pantheon.plutus.wallet import WalletCrypto
         
         plaintext = b"Secret data"
         password = "correct_password"
@@ -758,7 +758,7 @@ class TestWalletEncryption(unittest.TestCase):
     
     def test_different_salts(self):
         """Same password with different salts should produce different keys."""
-        from wallet import WalletCrypto
+        from pantheon.plutus.wallet import WalletCrypto
         import secrets
         
         password = "test_password"
@@ -772,7 +772,7 @@ class TestWalletEncryption(unittest.TestCase):
     
     def test_key_derivation_deterministic(self):
         """Same password and salt should produce same key."""
-        from wallet import WalletCrypto
+        from pantheon.plutus.wallet import WalletCrypto
         
         password = "test_password"
         salt = b"fixed_salt_for_testing_00000000"  # 32 bytes
@@ -789,7 +789,7 @@ class TestConstantTimeOperations(unittest.TestCase):
     def test_lsag_uses_constant_time_comparison(self):
         """LSAG verification should use constant-time comparison."""
         import hmac
-        from privacy import LSAG, Ed25519Point
+        from pantheon.nyx.privacy import LSAG, Ed25519Point
         
         # Generate ring and sign
         ring_size = 4
@@ -812,7 +812,7 @@ class TestConstantTimeOperations(unittest.TestCase):
     
     def test_stealth_address_uses_constant_time(self):
         """Stealth address scanning should use constant-time comparison."""
-        from privacy import StealthKeys, StealthAddress
+        from pantheon.nyx.privacy import StealthKeys, StealthAddress
         
         keys = StealthKeys.generate()
         output, _ = StealthAddress.create_output(keys.view_public, keys.spend_public)
@@ -827,7 +827,7 @@ class TestECVRFTestVectors(unittest.TestCase):
     
     def test_prove_verify_roundtrip(self):
         """ECVRF prove and verify should work together."""
-        from crypto import ECVRF, Ed25519
+        from pantheon.prometheus.crypto import ECVRF, Ed25519
         
         sk, pk = Ed25519.generate_keypair()
         alpha = b"test input message"
@@ -849,7 +849,7 @@ class TestECVRFTestVectors(unittest.TestCase):
     
     def test_deterministic_output(self):
         """Same input should produce same output."""
-        from crypto import ECVRF, Ed25519
+        from pantheon.prometheus.crypto import ECVRF, Ed25519
         
         sk, pk = Ed25519.generate_keypair()
         alpha = b"determinism test"
@@ -862,7 +862,7 @@ class TestECVRFTestVectors(unittest.TestCase):
     
     def test_different_inputs_different_outputs(self):
         """Different inputs should produce different outputs."""
-        from crypto import ECVRF, Ed25519
+        from pantheon.prometheus.crypto import ECVRF, Ed25519
         
         sk, pk = Ed25519.generate_keypair()
         

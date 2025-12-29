@@ -70,7 +70,7 @@ def get_metrics():
 
     # Try database directly (fallback)
     try:
-        from database import BlockchainDB
+        from pantheon.hades.database import BlockchainDB
         from config import StorageConfig
 
         db_path = '/var/lib/proofoftime/blockchain.db'

@@ -20,24 +20,24 @@ from typing import List
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from dag import (
+from pantheon.hades.dag import (
     DAGBlock, DAGBlockHeader, PHANTOMOrdering,
     DAGConsensusEngine, DAGBlockProducer,
     MAX_PARENTS, MIN_WEIGHT_THRESHOLD, PHANTOM_K,
     estimate_throughput
 )
-from dag_storage import DAGStorage, LRUCache, CHECKPOINT_INTERVAL
-from tiered_privacy import (
+from pantheon.hades.dag_storage import DAGStorage, LRUCache, CHECKPOINT_INTERVAL
+from pantheon.nyx.tiered_privacy import (
     PrivacyTier, TieredOutput, TieredInput, TieredTransaction,
     TieredTransactionBuilder, TierValidator, AnonymitySetManager,
     TIER_SPECS, DEFAULT_RING_SIZE
 )
-from ristretto import (
+from pantheon.nyx.ristretto import (
     RistrettoPoint, RistrettoScalar, RistrettoGenerators,
     RistrettoPedersenCommitment, BulletproofPP,
     generate_ristretto_key_image, L
 )
-from crypto import Ed25519, sha256
+from pantheon.prometheus.crypto import Ed25519, sha256
 from config import PROTOCOL, StorageConfig
 
 
@@ -251,13 +251,17 @@ class TestDAGConsensusEngine:
         """Create consensus engine."""
         return DAGConsensusEngine()
     
-    def test_weight_threshold(self, engine):
+    def test_weight_threshold(self, engine, monkeypatch):
         """Test minimum weight threshold for block production."""
+        # Enable unsafe mode for testing
+        import pantheon.hades.dag as dag_module
+        monkeypatch.setattr(dag_module, 'UNSAFE_ALLOWED', True)
+
         sk, pk = Ed25519.generate_keypair()
-        
+
         # Node with 0 weight cannot produce
         assert not engine.can_produce_block(pk)
-        
+
         # Node with sufficient weight can produce
         engine.update_node_weight(pk, 0.15)
         assert engine.can_produce_block(pk)

@@ -68,13 +68,13 @@ class FuzzDeserialize:
         """
         # Import custom exceptions
         try:
-            from privacy import RingSignatureError
+            from pantheon.nyx.privacy import RingSignatureError
             custom_exceptions = (RingSignatureError,)
         except ImportError:
             custom_exceptions = ()
         
         try:
-            from crypto import CryptoError, VDFError, VRFError
+            from pantheon.prometheus.crypto import CryptoError, VDFError, VRFError
             custom_exceptions = custom_exceptions + (CryptoError, VDFError, VRFError)
         except ImportError:
             pass
@@ -114,7 +114,7 @@ class TestStructuresFuzz(unittest.TestCase):
     
     def test_fuzz_varint(self):
         """Fuzz varint parsing."""
-        from structures import read_varint
+        from pantheon.themis.structures import read_varint
         
         for _ in range(FUZZ_ITERATIONS):
             data = generate_random_bytes(100)
@@ -126,7 +126,7 @@ class TestStructuresFuzz(unittest.TestCase):
     
     def test_fuzz_block_header_deserialize(self):
         """Fuzz BlockHeader.deserialize()."""
-        from structures import BlockHeader
+        from pantheon.themis.structures import BlockHeader
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: BlockHeader.deserialize(data),
@@ -136,7 +136,7 @@ class TestStructuresFuzz(unittest.TestCase):
     
     def test_fuzz_block_deserialize(self):
         """Fuzz Block.deserialize()."""
-        from structures import Block
+        from pantheon.themis.structures import Block
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: Block.deserialize(data),
@@ -146,7 +146,7 @@ class TestStructuresFuzz(unittest.TestCase):
     
     def test_fuzz_transaction_deserialize(self):
         """Fuzz Transaction.deserialize()."""
-        from structures import Transaction
+        from pantheon.themis.structures import Transaction
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: Transaction.deserialize(data),
@@ -156,7 +156,7 @@ class TestStructuresFuzz(unittest.TestCase):
     
     def test_fuzz_tx_input_deserialize(self):
         """Fuzz TxInput.deserialize()."""
-        from structures import TxInput
+        from pantheon.themis.structures import TxInput
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: TxInput.deserialize(data),
@@ -166,7 +166,7 @@ class TestStructuresFuzz(unittest.TestCase):
     
     def test_fuzz_tx_output_deserialize(self):
         """Fuzz TxOutput.deserialize()."""
-        from structures import TxOutput
+        from pantheon.themis.structures import TxOutput
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: TxOutput.deserialize(data),
@@ -180,7 +180,7 @@ class TestCryptoFuzz(unittest.TestCase):
     
     def test_fuzz_vdf_proof_deserialize(self):
         """Fuzz VDFProof.deserialize()."""
-        from crypto import VDFProof
+        from pantheon.prometheus.crypto import VDFProof
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: VDFProof.deserialize(data),
@@ -190,7 +190,7 @@ class TestCryptoFuzz(unittest.TestCase):
     
     def test_fuzz_vrf_output_deserialize(self):
         """Fuzz VRFOutput deserialization."""
-        from crypto import VRFOutput
+        from pantheon.prometheus.crypto import VRFOutput
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: VRFOutput.deserialize(data) if len(data) >= 112 else None,
@@ -200,7 +200,7 @@ class TestCryptoFuzz(unittest.TestCase):
     
     def test_fuzz_ed25519_verify(self):
         """Fuzz Ed25519 signature verification with random inputs."""
-        from crypto import Ed25519
+        from pantheon.prometheus.crypto import Ed25519
         
         for _ in range(FUZZ_ITERATIONS):
             try:
@@ -215,7 +215,7 @@ class TestCryptoFuzz(unittest.TestCase):
     
     def test_fuzz_vdf_verify(self):
         """Fuzz VDF verification with malformed proofs."""
-        from crypto import WesolowskiVDF, VDFProof, sha256
+        from pantheon.prometheus.crypto import WesolowskiVDF, VDFProof, sha256
         
         vdf = WesolowskiVDF(2048)
         
@@ -237,7 +237,7 @@ class TestConsensusFuzz(unittest.TestCase):
     
     def test_fuzz_node_state_deserialize(self):
         """Fuzz NodeState.deserialize()."""
-        from consensus import NodeState
+        from pantheon.athena.consensus import NodeState
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: NodeState.deserialize(data),
@@ -247,7 +247,7 @@ class TestConsensusFuzz(unittest.TestCase):
     
     def test_fuzz_slashing_evidence_deserialize(self):
         """Fuzz SlashingEvidence.deserialize()."""
-        from consensus import SlashingEvidence
+        from pantheon.athena.consensus import SlashingEvidence
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: SlashingEvidence.deserialize(data),
@@ -261,7 +261,7 @@ class TestPrivacyFuzz(unittest.TestCase):
     
     def test_fuzz_lsag_signature_deserialize(self):
         """Fuzz LSAGSignature.deserialize()."""
-        from privacy import LSAGSignature
+        from pantheon.nyx.privacy import LSAGSignature
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: LSAGSignature.deserialize(data),
@@ -271,7 +271,7 @@ class TestPrivacyFuzz(unittest.TestCase):
     
     def test_fuzz_range_proof_deserialize(self):
         """Fuzz RangeProof deserialization."""
-        from privacy import RangeProof
+        from pantheon.nyx.privacy import RangeProof
         
         for _ in range(FUZZ_ITERATIONS):
             try:
@@ -296,7 +296,7 @@ class TestPrivacyFuzz(unittest.TestCase):
     
     def test_fuzz_lsag_verify(self):
         """Fuzz LSAG verification with malformed signatures."""
-        from privacy import LSAG, LSAGSignature, Ed25519Point
+        from pantheon.nyx.privacy import LSAG, LSAGSignature, Ed25519Point
         
         for _ in range(100):
             try:
@@ -317,7 +317,7 @@ class TestNetworkFuzz(unittest.TestCase):
     def test_fuzz_message_parsing(self):
         """Fuzz network message parsing."""
         # Note: MessageSerializer is part of message layer, test basic network structures
-        from network import VersionPayload
+        from pantheon.hermes.network import VersionPayload
         
         for _ in range(FUZZ_ITERATIONS):
             try:
@@ -328,7 +328,7 @@ class TestNetworkFuzz(unittest.TestCase):
     
     def test_fuzz_version_payload(self):
         """Fuzz version message payload."""
-        from network import VersionPayload
+        from pantheon.hermes.network import VersionPayload
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: VersionPayload.deserialize(data),
@@ -338,7 +338,7 @@ class TestNetworkFuzz(unittest.TestCase):
     
     def test_fuzz_inv_item(self):
         """Fuzz inventory item parsing."""
-        from network import InvItem
+        from pantheon.hermes.network import InvItem
         
         for _ in range(FUZZ_ITERATIONS):
             try:
@@ -354,7 +354,7 @@ class TestWalletFuzz(unittest.TestCase):
     
     def test_fuzz_wallet_output_deserialize(self):
         """Fuzz WalletOutput.deserialize()."""
-        from wallet import WalletOutput
+        from pantheon.plutus.wallet import WalletOutput
         
         survived = FuzzDeserialize.fuzz_method(
             lambda data: WalletOutput.deserialize(data),
@@ -364,7 +364,7 @@ class TestWalletFuzz(unittest.TestCase):
     
     def test_fuzz_wallet_decrypt(self):
         """Fuzz wallet decryption with random data."""
-        from wallet import WalletCrypto
+        from pantheon.plutus.wallet import WalletCrypto
         
         for _ in range(100):  # Fewer iterations, crypto is slow
             try:
@@ -384,7 +384,7 @@ class TestDatabaseFuzz(unittest.TestCase):
         """Test SQL injection resistance."""
         import tempfile
         import os
-        from database import BlockchainDB, StorageConfig
+        from pantheon.hades.database import BlockchainDB, StorageConfig
         
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = os.path.join(tmpdir, "fuzz_test.db")
@@ -416,7 +416,7 @@ class TestMutationFuzz(unittest.TestCase):
     
     def test_mutate_valid_block(self):
         """Mutate valid block serialization."""
-        from structures import create_genesis_block, Block
+        from pantheon.themis.structures import create_genesis_block, Block
         
         genesis = create_genesis_block()
         valid_data = genesis.serialize()
@@ -430,7 +430,7 @@ class TestMutationFuzz(unittest.TestCase):
     
     def test_truncate_valid_block(self):
         """Truncate valid block serialization."""
-        from structures import create_genesis_block, Block
+        from pantheon.themis.structures import create_genesis_block, Block
         
         genesis = create_genesis_block()
         valid_data = genesis.serialize()
@@ -444,7 +444,7 @@ class TestMutationFuzz(unittest.TestCase):
     
     def test_mutate_valid_vdf_proof(self):
         """Mutate valid VDF proof serialization."""
-        from crypto import WesolowskiVDF, sha256
+        from pantheon.prometheus.crypto import WesolowskiVDF, sha256
         
         vdf = WesolowskiVDF(2048)
         input_data = sha256(b"test")
@@ -454,7 +454,7 @@ class TestMutationFuzz(unittest.TestCase):
         for _ in range(100):
             try:
                 mutated = mutate_bytes(valid_data, 0.01)
-                from crypto import VDFProof
+                from pantheon.prometheus.crypto import VDFProof
                 mutated_proof = VDFProof.deserialize(mutated)
                 vdf.verify(mutated_proof)  # Should not crash
             except Exception:
@@ -466,12 +466,12 @@ class TestBoundaryConditions(unittest.TestCase):
     
     def test_empty_input_all_deserialize(self):
         """All deserialize methods should handle empty input."""
-        from structures import Block, BlockHeader, Transaction, TxInput, TxOutput
-        from crypto import VDFProof
-        from consensus import NodeState, SlashingEvidence
-        from privacy import LSAGSignature, RingSignatureError
-        from network import VersionPayload
-        from wallet import WalletOutput
+        from pantheon.themis.structures import Block, BlockHeader, Transaction, TxInput, TxOutput
+        from pantheon.prometheus.crypto import VDFProof
+        from pantheon.athena.consensus import NodeState, SlashingEvidence
+        from pantheon.nyx.privacy import LSAGSignature, RingSignatureError
+        from pantheon.hermes.network import VersionPayload
+        from pantheon.plutus.wallet import WalletOutput
         
         deserialize_methods = [
             (Block, "Block"),
@@ -504,7 +504,7 @@ class TestBoundaryConditions(unittest.TestCase):
     
     def test_max_size_varint(self):
         """Test maximum size varint handling."""
-        from structures import write_varint, read_varint
+        from pantheon.themis.structures import write_varint, read_varint
         
         # Test large values
         large_values = [
@@ -530,7 +530,7 @@ class TestBoundaryConditions(unittest.TestCase):
     
     def test_nested_structure_depth(self):
         """Test that deeply nested structures don't cause stack overflow."""
-        from structures import Transaction, TxInput, TxOutput, TxType
+        from pantheon.themis.structures import Transaction, TxInput, TxOutput, TxType
         
         # Create transaction with many inputs/outputs (but reasonable size)
         tx = Transaction(tx_type=TxType.STANDARD)

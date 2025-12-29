@@ -233,15 +233,17 @@ Horizontal scaling: more parents = higher throughput.
 ### 7.1 Unit
 
 ```
-1 Ɉ (Jot) = 1 second of time
+1 TIME = 1 second of time
 ```
+
+The native token is called **TIME**. One TIME equals one second.
 
 ### 7.2 Emission
 
 ```
-Total supply: 21,000,000 minutes = 1,260,000,000 Ɉ
+Total supply: 21,000,000 minutes = 1,260,000,000 TIME
 Block time: 10 minutes
-Initial reward: 50 Ɉ per block
+Initial reward: 50 TIME per block
 Halving: every 210,000 blocks (~4 years)
 Full emission: ~132 years
 ```
@@ -341,4 +343,4 @@ In time, we are all equal.
 
 ---
 
-**Ɉ**
+**TIME**

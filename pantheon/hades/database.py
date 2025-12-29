@@ -23,7 +23,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from pantheon.themis import Block, BlockHeader, Transaction, TxOutput
-from pantheon.athena import NodeState, NodeStatus
+# Import directly from consensus.py to avoid circular import with athena.__init__
+from pantheon.athena.consensus import NodeState, NodeStatus
 from config import PROTOCOL, StorageConfig
 
 logger = logging.getLogger("proof_of_time.database")
@@ -915,7 +916,7 @@ def _self_test():
         db = BlockchainDB(config)
         
         # Test block storage
-        from structures import create_genesis_block
+        from pantheon.themis.structures import create_genesis_block
         genesis = create_genesis_block()
         db.store_block(genesis)
         

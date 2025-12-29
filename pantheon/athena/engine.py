@@ -36,13 +36,13 @@ from pantheon.adonis import (
     compute_f_rep_adonis, create_reputation_modifier
 )
 
-# DAG modules
-from pantheon.hades import (
-    DAGBlock, DAGBlockHeader, PHANTOMOrdering, 
+# DAG modules - import from submodules to avoid circular import
+from pantheon.hades.dag import (
+    DAGBlock, DAGBlockHeader, PHANTOMOrdering,
     DAGConsensusEngine, DAGBlockProducer,
     MAX_PARENTS, MIN_WEIGHT_THRESHOLD
 )
-from pantheon.hades import DAGStorage
+from pantheon.hades.dag_storage import DAGStorage
 
 # Privacy modules
 from pantheon.nyx import (
@@ -593,7 +593,7 @@ class ProofOfTimeNode:
         - INVALID_VDF -> ReputationEvent.VDF_INVALID
         - INVALID_VRF -> ReputationEvent.VRF_INVALID
         """
-        from consensus import SlashingCondition
+        from pantheon.athena.consensus import SlashingCondition
 
         event_map = {
             SlashingCondition.EQUIVOCATION: ReputationEvent.EQUIVOCATION,

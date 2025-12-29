@@ -443,7 +443,7 @@ class TieredTransaction:
     
     def serialize(self) -> bytes:
         """Serialize transaction."""
-        from structures import write_varint, write_bytes
+        from pantheon.themis.structures import write_varint, write_bytes
         
         data = bytearray()
         
@@ -471,7 +471,7 @@ class TieredTransaction:
     @classmethod
     def deserialize(cls, data: bytes, offset: int = 0) -> Tuple['TieredTransaction', int]:
         """Deserialize transaction."""
-        from structures import read_varint, read_bytes
+        from pantheon.themis.structures import read_varint, read_bytes
         
         version = struct.unpack_from('<H', data, offset)[0]
         offset += 2

@@ -3,7 +3,7 @@
 **Alejandro Montana**
 alejandromontana@tutamail.com
 
-**Version 2.0** — December 2025
+**Version 2.1** — December 2025
 
 ---
 
@@ -121,28 +121,29 @@ The Adonis score determines selection probability.
 
 ---
 
-## 5. The Six Dimensions of Adonis
+## 5. The Five Fingers of Adonis
 
-Node weight is computed from six dimensions, each measuring a different aspect of node contribution.
+Node weight is computed from five dimensions. Like fingers on a hand — each has a role.
 
 ### 5.1 Formula
 
 ```
-Adonis(i) = Σ(w_d × score_d) for d ∈ {TIME, INTEGRITY, STORAGE, GEOGRAPHY, RELIABILITY, STAKE}
+Adonis(i) = Σ(w_d × score_d) for d ∈ {TIME, INTEGRITY, STORAGE, GEOGRAPHY, HANDSHAKE}
 ```
 
-### 5.2 Dimensions
+### 5.2 The Five Fingers
 
-| # | Dimension | Domain | Weight | Saturation |
-|---|-----------|--------|--------|------------|
-| 1 | **TIME** | Uptime | 35% | 180 days |
-| 2 | **INTEGRITY** | Behavior | 22% | No violations |
-| 3 | **STORAGE** | Data | 15% | 100% chain history |
-| 4 | **GEOGRAPHY** | Location | 12% | Country + city diversity |
-| 5 | **RELIABILITY** | Performance | 8% | 99.9% response rate |
-| 6 | **STAKE** | Collateral | 8% | Optional |
+| Finger | Dimension | Weight | Saturation |
+|--------|-----------|--------|------------|
+| 👍 **Thumb** | TIME | **50%** | 180 days uptime |
+| 👆 Index | INTEGRITY | 20% | No violations |
+| 🖕 Middle | STORAGE | 15% | 100% chain history |
+| 💍 Ring | GEOGRAPHY | 10% | Country + city diversity |
+| 🤙 Pinky | HANDSHAKE | 5% | 10 mutual trust bonds |
 
-### 5.3 TIME — 35%
+**TIME is the thumb.** Makes the hand work. 50% weight — this is Proof of Time.
+
+### 5.3 THUMB: TIME — 50%
 
 ```
 score_time = min(uptime_seconds / 15,552,000, 1.0)
@@ -150,9 +151,9 @@ score_time = min(uptime_seconds / 15,552,000, 1.0)
 
 15,552,000 seconds = 180 days. After 180 days, newcomer equals veteran.
 
-TIME is the primary dimension. Without time commitment, nothing else matters.
+TIME is the thumb. Without it, the hand cannot grasp.
 
-### 5.4 INTEGRITY — 22%
+### 5.4 INDEX: INTEGRITY — 20%
 
 Behavioral score. Positive actions increase, violations decrease:
 
@@ -165,7 +166,7 @@ Behavioral score. Positive actions increase, violations decrease:
 
 Double protection: score reduction AND time penalty.
 
-### 5.5 STORAGE — 15%
+### 5.5 MIDDLE: STORAGE — 15%
 
 ```
 score_storage = min(stored_blocks / total_blocks, 1.0)
@@ -173,9 +174,7 @@ score_storage = min(stored_blocks / total_blocks, 1.0)
 
 Full nodes store complete history. Light nodes get proportional score.
 
-### 5.6 GEOGRAPHY — 12%
-
-Incentivizes global distribution:
+### 5.6 RING: GEOGRAPHY — 10%
 
 ```
 country_score = 0.6 × (1 / (1 + log10(nodes_in_country))) + 0.4 × (countries / 50)
@@ -188,17 +187,22 @@ First node from new city: +0.15 bonus.
 
 Fewer nodes in your location = higher score. Incentivizes global distribution.
 
-### 5.7 RELIABILITY — 8%
+### 5.7 PINKY: HANDSHAKE — 5%
+
+Elite bonus. Two veterans shake hands = cryptographic proof of mutual trust.
+
+Requirements:
+- TIME ≥ 90%
+- INTEGRITY ≥ 80%
+- STORAGE ≥ 90%
+- GEOGRAPHY > 10%
+- Different countries (anti-sybil)
 
 ```
-score_reliability = successful_responses / total_requests
+score_handshake = min(handshake_count / 10, 1.0)
 ```
 
-Measures node availability and response quality over time.
-
-### 5.8 STAKE — 8%
-
-Optional collateral for enhanced trust. Not required for basic participation. Provides additional weight for nodes willing to put tokens at risk.
+The pinky completes the hand.
 
 ---
 
@@ -233,20 +237,31 @@ Horizontal scaling: more parents = higher throughput.
 ### 7.1 Unit
 
 ```
-1 Ɉ (Jot) = 1 second of time
+1 TIME = 1 second of time
 ```
+
+The native token is called **TIME**. One TIME equals one second.
 
 ### 7.2 Emission
 
 | Parameter | Value |
 |-----------|-------|
-| Total supply | 1,260,000,000 Ɉ |
+| Total supply | 1,260,000,000 TIME |
 | Block time | 10 minutes |
-| Initial reward | 50 Ɉ per block |
+| Initial reward | 50 TIME per block |
 | Halving | Every 210,000 blocks (~4 years) |
 | Full emission | ~132 years |
 
 Same curve as Bitcoin. Predictable, deflationary.
+
+### 7.3 Denominations
+
+| Unit | TIME |
+|------|------|
+| 1 second | 1 TIME |
+| 1 minute | 60 TIME |
+| 1 hour | 3,600 TIME |
+| 1 day | 86,400 TIME |
 
 ---
 
@@ -311,6 +326,7 @@ Not feasible.
 | Energy | Massive | Low | Minimal |
 | 51% attack cost | $20B | $10B | N × 180 days |
 | Finality | Probabilistic | ~15 min | 10 min (deterministic) |
+| Token | BTC | ETH | **TIME** |
 
 ---
 
@@ -321,7 +337,7 @@ The protocol is organized into 12 modules, each named after a Greek deity:
 | # | God | Domain | Description |
 |---|-----|--------|-------------|
 | 1 | **Chronos** | Time | VDF, temporal proofs |
-| 2 | **Adonis** | Reputation | 6-dimension trust |
+| 2 | **Adonis** | Reputation | 5-finger trust system |
 | 3 | **Hermes** | Network | P2P, Noise Protocol |
 | 4 | **Hades** | Storage | SQLite, DAG |
 | 5 | **Athena** | Consensus | VRF leader selection |
@@ -339,13 +355,12 @@ The protocol is organized into 12 modules, each named after a Greek deity:
 
 We have proposed a system for electronic transactions that does not rely on capital for consensus. Time is the only resource that cannot be bought, accelerated, or transferred.
 
-The network self-organizes through the Six Dimensions of Adonis:
-- **TIME** ensures long-term commitment
-- **INTEGRITY** removes bad actors
-- **STORAGE** maintains data availability
-- **GEOGRAPHY** enforces global distribution
-- **RELIABILITY** rewards performance
-- **STAKE** provides optional collateral
+The network self-organizes through the Five Fingers of Adonis:
+- **TIME** (Thumb) ensures long-term commitment
+- **INTEGRITY** (Index) removes bad actors
+- **STORAGE** (Middle) maintains data availability
+- **GEOGRAPHY** (Ring) enforces global distribution
+- **HANDSHAKE** (Pinky) creates trust networks
 
 The result is a system where:
 - Everyone starts equal
@@ -367,4 +382,4 @@ The result is a system where:
 
 ---
 
-**Ɉ**
+**TIME**
