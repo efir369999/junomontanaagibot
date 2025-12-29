@@ -82,8 +82,8 @@ class ProofOfTimeNode:
     - DAG-based block structure
     - PHANTOM-PoT ordering
     - Tiered privacy (T0-T3)
-    - VDF-based consensus
-    - Time-weighted node influence
+    - Proof of Time (PoT) consensus with VDF finality
+    - Time-weighted node influence (Adonis)
     """
     
     def __init__(
