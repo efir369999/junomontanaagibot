@@ -60,7 +60,7 @@ The body as a timestamp server. Life itself proves the passage of time through i
 | Document | Description |
 |----------|-------------|
 | Time_v1.0.pdf | Whitepaper: Nash's Ideal Money, Temporal Compression, 1:1 convergence |
-| ProofOfTime_v1.pdf | Technical specification: VDF, Adonis, DAG-PHANTOM |
+| ProofOfTime_v1.0.pdf | Technical specification: VDF, Adonis, DAG-PHANTOM |
 
 ---
 

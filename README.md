@@ -94,7 +94,7 @@ python node.py --run
 | Document | Content |
 |----------|---------|
 | Time_v1.0.pdf | Whitepaper. Nash's Ideal Money. Temporal Compression. |
-| ProofOfTime_v1.pdf | Technical specification. VDF. Adonis. DAG. |
+| ProofOfTime_v1.0.pdf | Technical specification. VDF. Adonis. DAG. |
 
 ---
 
