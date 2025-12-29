@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-METATRON - One-Click Deploy System for Time Testnet
+METATRON - The Angel Who Governs the Pantheon
 
-The angel who governs the Pantheon of gods.
-Analyzes, deploys, and monitors all 12 modules.
+One-click deploy with real-time dashboard showing all 12 gods.
+Full node operation with mining and wallet integration.
 
 Usage:
     python metatron.py              # Status check
-    python metatron.py --deploy     # Deploy testnet node
-    python metatron.py --dashboard  # Live dashboard
+    python metatron.py --deploy     # Deploy + mine + dashboard
+    python metatron.py --peer IP    # Connect to peer
 """
 
 import os
@@ -17,9 +17,12 @@ import time
 import threading
 import argparse
 import logging
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+import signal
+import json
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 from enum import Enum
+from datetime import datetime, timezone
 
 # ============================================================================
 # CONFIGURATION
@@ -36,18 +39,14 @@ class GodStatus(Enum):
 
 @dataclass
 class God:
-    """Pantheon god definition."""
+    """Pantheon god with live metrics."""
     name: str
     symbol: str
     domain: str
     modules: List[str]
     status: GodStatus = GodStatus.OFFLINE
     error: Optional[str] = None
-    metrics: Dict = None
-
-    def __post_init__(self):
-        if self.metrics is None:
-            self.metrics = {}
+    metrics: Dict = field(default_factory=dict)
 
 
 # The 12 Gods of Pantheon
@@ -55,13 +54,13 @@ PANTHEON = {
     "chronos": God(
         name="Chronos",
         symbol="⏱",
-        domain="Time (VDF, PoH)",
+        domain="Time (VDF/PoH)",
         modules=["pantheon.chronos.poh", "pantheon.chronos.vdf_fast"]
     ),
     "adonis": God(
         name="Adonis",
         symbol="✋",
-        domain="Reputation (5 Fingers)",
+        domain="Reputation",
         modules=["pantheon.adonis.adonis"]
     ),
     "hermes": God(
@@ -73,13 +72,13 @@ PANTHEON = {
     "hades": God(
         name="Hades",
         symbol="💾",
-        domain="Storage (DAG, DB)",
+        domain="Storage",
         modules=["pantheon.hades.database", "pantheon.hades.dag", "pantheon.hades.dag_storage"]
     ),
     "athena": God(
         name="Athena",
         symbol="⚖",
-        domain="Consensus (VRF)",
+        domain="Consensus",
         modules=["pantheon.athena.consensus", "pantheon.athena.engine"]
     ),
     "prometheus": God(
@@ -92,18 +91,18 @@ PANTHEON = {
         name="Mnemosyne",
         symbol="📋",
         domain="Mempool",
-        modules=[]  # Stub
+        modules=[]  # Integrated in node
     ),
     "plutus": God(
         name="Plutus",
         symbol="💰",
-        domain="Wallet (UTXO)",
+        domain="Wallet",
         modules=["pantheon.plutus.wallet"]
     ),
     "nyx": God(
         name="Nyx",
         symbol="🌙",
-        domain="Privacy (Ring, Stealth)",
+        domain="Privacy",
         modules=["pantheon.nyx.privacy", "pantheon.nyx.tiered_privacy", "pantheon.nyx.ristretto"]
     ),
     "themis": God(
@@ -115,7 +114,7 @@ PANTHEON = {
     "iris": God(
         name="Iris",
         symbol="🌈",
-        domain="RPC & Dashboard",
+        domain="RPC",
         modules=["pantheon.iris.rpc"]
     ),
     "ananke": God(
@@ -134,17 +133,30 @@ PANTHEON = {
 class Metatron:
     """
     The angel who governs the Pantheon.
-
-    Metatron is the scribe of God in Jewish tradition,
-    responsible for recording all events in the universe.
-    Here, he orchestrates the 12 gods of Proof of Time.
+    Orchestrates all 12 gods with real-time monitoring.
     """
 
-    def __init__(self):
-        self.gods = PANTHEON.copy()
+    def __init__(self, data_dir: str = "/var/lib/proofoftime"):
+        self.gods = {k: God(
+            name=v.name,
+            symbol=v.symbol,
+            domain=v.domain,
+            modules=v.modules.copy(),
+            status=v.status,
+            error=v.error,
+            metrics={}
+        ) for k, v in PANTHEON.items()}
+        self.data_dir = data_dir
         self.node = None
+        self.wallet = None
         self.running = False
         self._lock = threading.Lock()
+        self._shutdown = threading.Event()
+
+        # Metrics
+        self.start_time = 0
+        self.session_blocks = 0
+        self.session_rewards = 0
 
     def analyze(self) -> Dict[str, GodStatus]:
         """Analyze all gods and return their status."""
@@ -169,57 +181,82 @@ class Metatron:
         return results
 
     def deploy(self, peer_address: Optional[str] = None) -> bool:
-        """Deploy a testnet node with all gods active."""
-        print("\n" + "="*60)
-        print("  METATRON - Deploying Time Testnet Node")
-        print("="*60 + "\n")
-
-        # Set environment
+        """Deploy a full node with all gods active."""
         os.environ.setdefault("POT_NETWORK", "TESTNET")
         os.environ.setdefault("POT_ALLOW_UNSAFE", "1")
 
         if peer_address:
             os.environ["POT_BOOTSTRAP_PEERS"] = peer_address
-            print(f"  Bootstrap peer: {peer_address}")
 
         # Analyze gods
-        print("\n  Analyzing Pantheon...")
         results = self.analyze()
-
         ready = sum(1 for s in results.values() if s != GodStatus.ERROR)
-        total = len(results)
 
-        print(f"  Gods ready: {ready}/{total}")
-
-        if ready < 10:
-            print("\n  ERROR: Too many gods in ERROR state. Cannot deploy.")
+        if ready < 8:
+            print(f"\n  ERROR: Only {ready}/12 gods ready. Cannot deploy.\n")
             return False
 
-        # Start node
-        print("\n  Starting node...")
         try:
             from node import FullNode, BlockProducer
-            from config import NodeConfig
+            from config import NodeConfig, StorageConfig
+            from pantheon.plutus import Wallet
 
+            # Configure node
+            os.makedirs(self.data_dir, exist_ok=True)
             config = NodeConfig()
+            config.storage = StorageConfig(db_path=os.path.join(self.data_dir, 'blockchain.db'))
+
+            # Load or create keys
+            key_file = os.path.join(self.data_dir, 'node_key.json')
+            if os.path.exists(key_file):
+                with open(key_file, 'r') as f:
+                    key_data = json.load(f)
+                    secret_key = bytes.fromhex(key_data['secret_key'])
+                    public_key = bytes.fromhex(key_data['public_key'])
+            else:
+                from pantheon.prometheus import Ed25519
+                secret_key, public_key = Ed25519.generate_keypair()
+                with open(key_file, 'w') as f:
+                    json.dump({
+                        'secret_key': secret_key.hex(),
+                        'public_key': public_key.hex()
+                    }, f, indent=2)
+                os.chmod(key_file, 0o600)
+
+            # Load or create wallet (testnet uses empty password)
+            wallet_file = os.path.join(self.data_dir, 'wallet.dat')
+            testnet_password = ""  # Empty password for testnet convenience
+            if os.path.exists(wallet_file):
+                self.wallet = Wallet.load(wallet_file, testnet_password)
+            else:
+                self.wallet = Wallet()
+                self.wallet.save(wallet_file, testnet_password)
+                os.chmod(wallet_file, 0o600)
+
+            # Start node
             self.node = FullNode(config)
             self.node.start()
+            self.node.set_wallet(self.wallet)
+            self.node.enable_mining(secret_key, public_key)
 
             # Mark gods as online
             for god_id in self.gods:
                 if self.gods[god_id].status != GodStatus.STUB:
                     self.gods[god_id].status = GodStatus.ONLINE
 
-            print("  Node started successfully!")
             self.running = True
+            self.start_time = time.time()
             return True
 
         except Exception as e:
-            print(f"  ERROR: Failed to start node: {e}")
+            print(f"\n  ERROR: {e}\n")
+            import traceback
+            traceback.print_exc()
             return False
 
     def stop(self):
         """Stop the node."""
+        self._shutdown.set()
         if self.node:
             self.node.stop()
             self.running = False
@@ -227,104 +264,258 @@ class Metatron:
                 if god.status == GodStatus.ONLINE:
                     god.status = GodStatus.OFFLINE
 
-    def get_status_display(self) -> str:
-        """Get visual status of all gods."""
-        lines = []
-        lines.append("")
-        lines.append("╔════════════════════════════════════════════════════════════╗")
-        lines.append("║              PANTHEON - The 12 Gods of Time                ║")
-        lines.append("╠════════════════════════════════════════════════════════════╣")
-
-        for god_id, god in self.gods.items():
-            status_color = {
-                GodStatus.ONLINE: "\033[92m●\033[0m",   # Green
-                GodStatus.OFFLINE: "\033[90m○\033[0m",  # Gray
-                GodStatus.STARTING: "\033[93m◐\033[0m", # Yellow
-                GodStatus.ERROR: "\033[91m✗\033[0m",    # Red
-                GodStatus.STUB: "\033[90m◌\033[0m",     # Gray hollow
-            }.get(god.status, "?")
-
-            status_text = god.status.value.ljust(8)
-            name = f"{god.symbol} {god.name}".ljust(15)
-            domain = god.domain[:25].ljust(25)
-
-            lines.append(f"║  {status_color} {name} │ {domain} │ {status_text} ║")
-
-        lines.append("╠════════════════════════════════════════════════════════════╣")
-
-        # Summary
-        online = sum(1 for g in self.gods.values() if g.status == GodStatus.ONLINE)
-        total = len(self.gods)
-        stubs = sum(1 for g in self.gods.values() if g.status == GodStatus.STUB)
-
-        summary = f"Online: {online}/{total-stubs} active gods, {stubs} stubs"
-        lines.append(f"║  {summary.center(56)} ║")
-        lines.append("╚════════════════════════════════════════════════════════════╝")
-        lines.append("")
-
-        return "\n".join(lines)
-
-    def dashboard(self, refresh_rate: float = 1.0):
-        """Run live dashboard."""
-        print("\033[2J\033[H")  # Clear screen
-        print("METATRON Dashboard - Press Ctrl+C to exit\n")
-
-        try:
-            while True:
-                # Update metrics if node is running
-                if self.node and self.running:
-                    self._update_metrics()
-
-                # Clear and redraw
-                print("\033[H")  # Move cursor to top
-                print(self.get_status_display())
-
-                # Show node metrics if available
-                if self.node and self.running:
-                    self._print_node_metrics()
-
-                time.sleep(refresh_rate)
-
-        except KeyboardInterrupt:
-            print("\n\nShutting down...")
-            self.stop()
-
-    def _update_metrics(self):
-        """Update god metrics from running node."""
+    def update_metrics(self):
+        """Update live metrics from all gods."""
         if not self.node:
             return
 
         try:
-            # Chronos - block height
+            # CHRONOS - Time/VDF
             if self.node.chain_tip:
-                self.gods["chronos"].metrics["height"] = self.node.chain_tip.height
+                self.gods["chronos"].metrics = {
+                    "slot": self.node.chain_tip.height,
+                    "checkpoint": self.node.chain_tip.height // 600,
+                    "next_vdf": 600 - (self.node.chain_tip.height % 600),
+                    "timestamp": self.node.chain_tip.timestamp
+                }
 
-            # Hermes - peer count
-            if hasattr(self.node.network, 'peers'):
-                self.gods["hermes"].metrics["peers"] = len(self.node.network.peers)
+            if self.node.producer:
+                self.gods["chronos"].metrics["produced"] = self.node.producer.blocks_produced
+                self.session_blocks = self.node.producer.blocks_produced
 
-            # Hades - blocks stored
-            self.gods["hades"].metrics["blocks"] = self.node.chain_tip.height + 1 if self.node.chain_tip else 0
+            # ADONIS - Reputation
+            if hasattr(self.node, 'consensus') and self.node.consensus:
+                nodes = self.node.consensus.nodes if hasattr(self.node.consensus, 'nodes') else {}
+                self.gods["adonis"].metrics = {
+                    "nodes": len(nodes),
+                    "our_uptime": int(time.time() - self.start_time) if self.start_time else 0,
+                }
 
-            # Athena - nodes registered
-            if hasattr(self.node.consensus, 'nodes'):
-                self.gods["athena"].metrics["nodes"] = len(self.node.consensus.nodes)
+            # HERMES - Network
+            if hasattr(self.node, 'network') and self.node.network:
+                self.gods["hermes"].metrics = {
+                    "peers": self.node.network.get_peer_count(),
+                    "connected": self.node.network.get_peer_count() > 0,
+                }
 
-        except Exception:
+            # HADES - Storage
+            if hasattr(self.node, 'db') and self.node.db:
+                self.gods["hades"].metrics = {
+                    "blocks": self.node.chain_tip.height + 1 if self.node.chain_tip else 0,
+                    "db_path": self.node.db.db_path if hasattr(self.node.db, 'db_path') else "N/A",
+                }
+
+            # ATHENA - Consensus
+            if hasattr(self.node, 'consensus') and self.node.consensus:
+                self.gods["athena"].metrics = {
+                    "state": "PRODUCING" if self.node.producer and self.node.producer.running else "IDLE",
+                    "sync": self.node.sync_state.name if hasattr(self.node, 'sync_state') else "UNKNOWN",
+                }
+
+            # PROMETHEUS - Crypto
+            self.gods["prometheus"].metrics = {
+                "vdf_bits": 2048,
+                "ring_size": 16,
+            }
+
+            # MNEMOSYNE - Mempool
+            if hasattr(self.node, 'mempool') and self.node.mempool:
+                self.gods["mnemosyne"].metrics = {
+                    "tx_count": self.node.mempool.get_count(),
+                    "size_kb": self.node.mempool.get_size() // 1024,
+                }
+                self.gods["mnemosyne"].status = GodStatus.ONLINE
+
+            # PLUTUS - Wallet
+            if self.wallet:
+                try:
+                    bal = self.wallet.get_balance()  # Returns (confirmed, pending)
+                    balance = bal[0] if isinstance(bal, tuple) else bal
+                except:
+                    balance = 0
+
+                from config import get_block_reward
+                height = self.node.chain_tip.height if self.node.chain_tip else 0
+                reward = get_block_reward(height)
+                self.session_rewards = self.session_blocks * reward
+
+                try:
+                    addr = self.wallet.get_primary_address()[:16].hex() + "..."
+                except:
+                    addr = "N/A"
+
+                self.gods["plutus"].metrics = {
+                    "balance": balance,
+                    "session_earned": self.session_rewards,
+                    "reward_per_block": reward,
+                    "address": addr
+                }
+
+            # NYX - Privacy
+            self.gods["nyx"].metrics = {
+                "tiers": "T0-T3",
+                "stealth": "enabled",
+            }
+
+            # THEMIS - Validation
+            self.gods["themis"].metrics = {
+                "validated": self.node.chain_tip.height if self.node.chain_tip else 0,
+            }
+
+            # IRIS - RPC
+            self.gods["iris"].metrics = {
+                "port": 8332,
+                "status": "ready",
+            }
+
+            # ANANKE - Governance (stub)
+            self.gods["ananke"].metrics = {
+                "status": "stub",
+            }
+
+        except Exception as e:
+            logging.debug(f"Metrics update error: {e}")
+
+    def render_dashboard(self):
+        """Render full Pantheon dashboard."""
+        self.update_metrics()
+
+        # Colors
+        G, Y, R, C, M, B, D, W, N = (
+            '\033[92m', '\033[93m', '\033[91m', '\033[96m',
+            '\033[95m', '\033[1m', '\033[2m', '\033[97m', '\033[0m'
+        )
+
+        def col(text, color):
+            return f"{color}{text}{N}" if sys.stdout.isatty() else str(text)
+
+        def fmt_time(secs):
+            if secs < 60: return f"{secs}s"
+            if secs < 3600: return f"{secs // 60}m {secs % 60}s"
+            return f"{secs // 3600}h {(secs % 3600) // 60}m"
+
+        def fmt_amount(secs):
+            mins = secs / 60
+            if mins >= 1_000_000: return f"{mins / 1_000_000:.2f}M Ɉ"
+            if mins >= 1_000: return f"{mins / 1_000:.2f}K Ɉ"
+            return f"{mins:.2f} Ɉ"
+
+        # Clear screen
+        print("\033[2J\033[H", end="")
+
+        # Header
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        print()
+        print(col("  ╔═══════════════════════════════════════════════════════════════╗", G))
+        print(col("  ║", G) + col("   M E T A T R O N  -  Pantheon Dashboard                  ", W) + col("║", G))
+        print(col("  ║", G) + col(f"   {now}                            ", D) + col("║", G))
+        print(col("  ╚═══════════════════════════════════════════════════════════════╝", G))
+        print()
+
+        # Chronos - Time Layer
+        ch = self.gods["chronos"].metrics
+        slot = ch.get("slot", 0)
+        checkpoint = ch.get("checkpoint", 0)
+        next_vdf = ch.get("next_vdf", 600)
+        produced = ch.get("produced", 0)
+
+        print(col("  ⏱ CHRONOS ", M) + col("─────────────────────────────────────────────────", D))
+        print(f"    Slot: {col(slot, W)}  │  Checkpoint: {col(checkpoint, C)}  │  Next VDF: {col(fmt_time(next_vdf), Y)}")
+        print(f"    Blocks Produced: {col(produced, G)}")
+        print()
+
+        # Adonis - Reputation
+        ad = self.gods["adonis"].metrics
+        uptime = ad.get("our_uptime", 0)
+        nodes = ad.get("nodes", 1)
+
+        print(col("  ✋ ADONIS ", M) + col("──────────────────────────────────────────────────", D))
+        print(f"    Uptime: {col(fmt_time(uptime), W)}  │  Nodes: {col(nodes, C)}")
+        print()
+
+        # Hermes - Network
+        he = self.gods["hermes"].metrics
+        peers = he.get("peers", 0)
+
+        print(col("  📡 HERMES ", M) + col("──────────────────────────────────────────────────", D))
+        status = col("●", G) + " Connected" if peers > 0 else col("○", R) + " Solo"
+        print(f"    Peers: {col(peers, W)}  │  {status}")
+        print()
+
+        # Hades - Storage
+        ha = self.gods["hades"].metrics
+        blocks = ha.get("blocks", 0)
+
+        print(col("  💾 HADES ", M) + col("───────────────────────────────────────────────────", D))
+        print(f"    Blocks Stored: {col(blocks, W)}")
+        print()
+
+        # Athena - Consensus
+        at = self.gods["athena"].metrics
+        state = at.get("state", "IDLE")
+        state_col = G if state == "PRODUCING" else Y
+
+        print(col("  ⚖ ATHENA ", M) + col("──────────────────────────────────────────────────", D))
+        print(f"    State: {col(state, state_col)}  │  Sync: {at.get('sync', 'N/A')}")
+        print()
+
+        # Mnemosyne - Mempool
+        mn = self.gods["mnemosyne"].metrics
+        tx_count = mn.get("tx_count", 0)
+
+        print(col("  📋 MNEMOSYNE ", M) + col("────────────────────────────────────────────────", D))
+        print(f"    Pending TX: {col(tx_count, W)}  │  Size: {mn.get('size_kb', 0)} KB")
+        print()
+
+        # Plutus - Wallet (larger section)
+        pl = self.gods["plutus"].metrics
+        balance = pl.get("balance", 0)
+        session = pl.get("session_earned", 0)
+        reward = pl.get("reward_per_block", 3000)
+        addr = pl.get("address", "N/A")
+
+        print(col("  💰 PLUTUS ", M) + col("──────────────────────────────────────────────────", D))
+        print(f"    Address:  {col(addr, C)}")
+        print(f"    Balance:  {col(fmt_amount(balance), W)}")
+        print(f"    Session:  {col(fmt_amount(session), G)} ({self.session_blocks} blocks)")
+        print(f"    Reward:   {col(fmt_amount(reward), Y)} per block")
+        print()
+
+        # Nyx - Privacy
+        print(col("  🌙 NYX ", M) + col("─────────────────────────────────────────────────────", D))
+        print(f"    Privacy Tiers: T0 (Public) → T3 (Full Ring)")
+        print()
+
+        # Bottom status bar
+        print(col("  ─────────────────────────────────────────────────────────────────", D))
+
+        # Gods summary
+        online = sum(1 for g in self.gods.values() if g.status == GodStatus.ONLINE)
+        stubs = sum(1 for g in self.gods.values() if g.status == GodStatus.STUB)
+
+        gods_line = "  "
+        for gid, g in self.gods.items():
+            if g.status == GodStatus.ONLINE:
+                gods_line += col(g.symbol, G) + " "
+            elif g.status == GodStatus.STUB:
+                gods_line += col(g.symbol, D) + " "
+            elif g.status == GodStatus.ERROR:
+                gods_line += col(g.symbol, R) + " "
+            else:
+                gods_line += col(g.symbol, Y) + " "
+
+        print(gods_line + f"  │  {col(f'{online}/{12-stubs} ONLINE', G if online > 8 else Y)}")
+        print()
+        print(col("  Ctrl+C to stop", D))
+
+    def dashboard_loop(self, refresh: float = 1.0):
+        """Run live dashboard with refresh."""
+        try:
+            while not self._shutdown.is_set():
+                self.render_dashboard()
+                self._shutdown.wait(timeout=refresh)
+        except KeyboardInterrupt:
             pass
-
-    def _print_node_metrics(self):
-        """Print node metrics."""
-        print("\n┌─────────────────────────────────────────────────────────────┐")
-        print("│                      NODE METRICS                           │")
-        print("├─────────────────────────────────────────────────────────────┤")
-
-        height = self.gods["chronos"].metrics.get("height", 0)
-        peers = self.gods["hermes"].metrics.get("peers", 0)
-        nodes = self.gods["athena"].metrics.get("nodes", 0)
-
-        print(f"│  Height: {str(height).ljust(10)} Peers: {str(peers).ljust(5)} Consensus Nodes: {nodes}   │")
-        print("└─────────────────────────────────────────────────────────────┘")
 
 
 # ============================================================================
@@ -333,43 +524,41 @@ class Metatron:
 
 def print_banner():
     """Print Metatron banner."""
-    banner = """
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║                                                               ║
-    ║   ███╗   ███╗███████╗████████╗ █████╗ ████████╗██████╗  ██████╗ ███╗   ██╗ ║
-    ║   ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗╚══██╔══╝██╔══██╗██╔═══██╗████╗  ██║ ║
-    ║   ██╔████╔██║█████╗     ██║   ███████║   ██║   ██████╔╝██║   ██║██╔██╗ ██║ ║
-    ║   ██║╚██╔╝██║██╔══╝     ██║   ██╔══██║   ██║   ██╔══██╗██║   ██║██║╚██╗██║ ║
-    ║   ██║ ╚═╝ ██║███████╗   ██║   ██║  ██║   ██║   ██║  ██║╚██████╔╝██║ ╚████║ ║
-    ║   ╚═╝     ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝ ║
-    ║                                                               ║
-    ║              The Angel Who Governs the Pantheon               ║
-    ║                   Time Testnet Deployer                       ║
-    ║                                                               ║
-    ╚═══════════════════════════════════════════════════════════════╝
+    G, N = '\033[92m', '\033[0m'
+    banner = f"""
+{G}    ███╗   ███╗███████╗████████╗ █████╗ ████████╗██████╗  ██████╗ ███╗   ██╗
+    ████╗ ████║██╔════╝╚══██╔══╝██╔══██╗╚══██╔══╝██╔══██╗██╔═══██╗████╗  ██║
+    ██╔████╔██║█████╗     ██║   ███████║   ██║   ██████╔╝██║   ██║██╔██╗ ██║
+    ██║╚██╔╝██║██╔══╝     ██║   ██╔══██║   ██║   ██╔══██╗██║   ██║██║╚██╗██║
+    ██║ ╚═╝ ██║███████╗   ██║   ██║  ██║   ██║   ██║  ██║╚██████╔╝██║ ╚████║
+    ╚═╝     ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝{N}
+
+                     The Angel Who Governs the Pantheon
+                        Time Testnet • One-Click Deploy
     """
     print(banner)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="METATRON - One-Click Deploy System for Time Testnet"
+        description="METATRON - One-Click Deploy for Time Testnet"
     )
     parser.add_argument(
         "--deploy", "-d",
         action="store_true",
-        help="Deploy a testnet node"
-    )
-    parser.add_argument(
-        "--dashboard",
-        action="store_true",
-        help="Run live dashboard"
+        help="Deploy testnet node with mining"
     )
     parser.add_argument(
         "--peer", "-p",
         type=str,
         default=None,
-        help="Bootstrap peer address (ip:port)"
+        help="Bootstrap peer (ip:port)"
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default="/var/lib/proofoftime",
+        help="Data directory"
     )
     parser.add_argument(
         "--status", "-s",
@@ -379,51 +568,75 @@ def main():
 
     args = parser.parse_args()
 
+    # Use local directory if default not writable
+    data_dir = args.data_dir
+    if data_dir == "/var/lib/proofoftime":
+        # Try to create, fall back to local
+        try:
+            os.makedirs(data_dir, exist_ok=True)
+        except PermissionError:
+            data_dir = os.path.expanduser("~/.proofoftime")
+            os.makedirs(data_dir, exist_ok=True)
+
+    # Logging to file when dashboard is active
+    if args.deploy:
+        log_dir = os.path.join(data_dir, 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s | %(levelname)-8s | %(message)s",
+            filename=os.path.join(log_dir, 'metatron.log'),
+            filemode='a'
+        )
+    else:
+        logging.basicConfig(
+            level=logging.WARNING,
+            format="%(asctime)s | %(levelname)-8s | %(message)s"
+        )
+
     print_banner()
+    metatron = Metatron(data_dir)
 
-    metatron = Metatron()
+    # Signal handler
+    def signal_handler(signum, frame):
+        print("\n\n  Shutting down Pantheon...")
+        metatron.stop()
+        sys.exit(0)
 
-    if args.status or (not args.deploy and not args.dashboard):
-        # Default: show status
-        metatron.analyze()
-        print(metatron.get_status_display())
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
-        # Show summary
+    if args.status or (not args.deploy):
+        # Status mode
+        print("  Analyzing Pantheon...\n")
+        results = metatron.analyze()
+
+        for god_id, god in metatron.gods.items():
+            status_sym = "✓" if god.status == GodStatus.OFFLINE else ("◌" if god.status == GodStatus.STUB else "✗")
+            status_col = "\033[92m" if god.status == GodStatus.OFFLINE else ("\033[90m" if god.status == GodStatus.STUB else "\033[91m")
+            print(f"  {status_col}{status_sym}\033[0m {god.symbol} {god.name.ljust(12)} │ {god.domain}")
+            if god.error:
+                print(f"      └─ {god.error}")
+
         errors = [g for g in metatron.gods.values() if g.status == GodStatus.ERROR]
+        print()
         if errors:
-            print("\nErrors detected:")
-            for god in errors:
-                print(f"  - {god.name}: {god.error}")
+            print(f"  \033[91m{len(errors)} gods have errors\033[0m")
         else:
-            print("\nAll gods ready for deployment.")
-            print("Run: python metatron.py --deploy")
+            print("  \033[92mAll gods ready.\033[0m Run: python metatron.py --deploy")
+        print()
 
     elif args.deploy:
-        if metatron.deploy(args.peer):
-            print("\n" + "="*60)
-            print("  Node deployed successfully!")
-            print("="*60)
-            print("\nRun dashboard: python metatron.py --dashboard")
-            print("Or press Ctrl+C to stop the node.\n")
+        # Deploy mode
+        print("  Deploying Pantheon...\n")
 
-            # Keep running
-            try:
-                while metatron.running:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                print("\nStopping node...")
-                metatron.stop()
+        if metatron.deploy(args.peer):
+            print("\n  \033[92mNode deployed. Starting dashboard...\033[0m\n")
+            time.sleep(1)
+            metatron.dashboard_loop()
         else:
             sys.exit(1)
 
-    elif args.dashboard:
-        metatron.analyze()
-        metatron.dashboard()
-
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)-8s | %(message)s"
-    )
     main()
