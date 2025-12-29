@@ -214,29 +214,39 @@ class ConnectionPool:
 # BLOCKCHAIN DATABASE
 # ============================================================================
 
+class DatabaseIntegrityError(DatabaseError):
+    """Database integrity check failed."""
+    pass
+
+
 class BlockchainDB:
     """
     Production blockchain database.
-    
+
     Features:
     - Efficient block/transaction storage
     - Key image tracking for privacy
     - Node state persistence
     - Chain state management
+    - Integrity verification on startup
     """
-    
-    def __init__(self, config: Optional[StorageConfig] = None):
+
+    def __init__(self, config: Optional[StorageConfig] = None, verify_integrity: bool = True):
         self.config = config or StorageConfig()
         self.db_path = self.config.db_path
-        
+
         # Ensure directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Connection pool
         self.pool = ConnectionPool(self.db_path)
-        
+
         # Initialize schema
         self._init_schema()
+
+        # Verify database integrity on startup
+        if verify_integrity:
+            self._verify_database_integrity()
     
     def _init_schema(self):
         """Initialize database schema."""
@@ -293,7 +303,173 @@ class BlockchainDB:
             cursor.execute("UPDATE schema_version SET version = ?", (2,))
             conn.commit()
             logger.info("Migration v1 -> v2 complete")
-    
+
+    def _verify_database_integrity(self) -> bool:
+        """
+        Verify database integrity on startup.
+
+        Checks:
+        1. SQLite internal integrity (PRAGMA integrity_check)
+        2. Foreign key constraint violations
+        3. Block hash consistency (stored hash matches computed hash)
+        4. Chain continuity (prev_hash references exist)
+
+        Raises:
+            DatabaseIntegrityError: If critical integrity issues found
+        """
+        logger.info("Verifying database integrity...")
+        conn = self.pool.get_connection()
+        cursor = conn.cursor()
+        issues = []
+
+        try:
+            # 1. SQLite internal integrity check
+            cursor.execute("PRAGMA integrity_check")
+            result = cursor.fetchone()[0]
+            if result != "ok":
+                issues.append(f"SQLite integrity check failed: {result}")
+                logger.error(f"SQLite integrity check FAILED: {result}")
+
+            # 2. Foreign key check
+            cursor.execute("PRAGMA foreign_key_check")
+            fk_violations = cursor.fetchall()
+            if fk_violations:
+                issues.append(f"Foreign key violations: {len(fk_violations)}")
+                for violation in fk_violations[:5]:  # Show first 5
+                    logger.warning(f"FK violation: {violation}")
+
+            # 3. Block hash consistency (sample check - not all blocks)
+            cursor.execute("""
+                SELECT height, hash, header_data FROM blocks
+                ORDER BY height DESC LIMIT 100
+            """)
+            blocks_to_check = cursor.fetchall()
+
+            for height, stored_hash, header_data in blocks_to_check:
+                if header_data:
+                    try:
+                        from pantheon.prometheus import sha256d
+                        computed_hash = sha256d(header_data)
+                        if computed_hash != stored_hash:
+                            issues.append(f"Block {height}: hash mismatch")
+                            logger.error(f"Block {height} hash mismatch: stored={stored_hash.hex()[:16]}, computed={computed_hash.hex()[:16]}")
+                    except Exception as e:
+                        logger.warning(f"Could not verify block {height} hash: {e}")
+
+            # 4. Chain continuity check
+            cursor.execute("""
+                SELECT b1.height, b1.prev_hash
+                FROM blocks b1
+                WHERE b1.height > 0
+                  AND NOT EXISTS (
+                    SELECT 1 FROM blocks b2 WHERE b2.hash = b1.prev_hash
+                  )
+                LIMIT 10
+            """)
+            orphan_refs = cursor.fetchall()
+            if orphan_refs:
+                issues.append(f"Chain discontinuity: {len(orphan_refs)} blocks with missing parents")
+                for height, prev_hash in orphan_refs:
+                    logger.warning(f"Block {height} references missing parent {prev_hash.hex()[:16]}")
+
+            # 5. Output table consistency
+            cursor.execute("""
+                SELECT COUNT(*) FROM outputs o
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM transactions t WHERE t.txid = o.txid
+                )
+            """)
+            orphan_outputs = cursor.fetchone()[0]
+            if orphan_outputs > 0:
+                issues.append(f"Orphan outputs: {orphan_outputs}")
+                logger.warning(f"{orphan_outputs} outputs reference non-existent transactions")
+
+            if issues:
+                logger.warning(f"Database integrity check found {len(issues)} issues")
+                for issue in issues:
+                    logger.warning(f"  - {issue}")
+
+                # Critical issues should raise exception
+                critical = [i for i in issues if "integrity check failed" in i.lower() or "hash mismatch" in i.lower()]
+                if critical:
+                    raise DatabaseIntegrityError(f"Critical database integrity issues: {critical}")
+
+                return False
+            else:
+                logger.info("Database integrity check PASSED")
+                return True
+
+        except DatabaseIntegrityError:
+            raise
+        except Exception as e:
+            logger.error(f"Database integrity check error: {e}")
+            raise DatabaseIntegrityError(f"Integrity check failed: {e}") from e
+
+    def verify_block_integrity(self, height: int) -> Tuple[bool, Optional[str]]:
+        """
+        Verify integrity of a specific block.
+
+        Returns:
+            (is_valid, error_message)
+        """
+        conn = self.pool.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT hash, header_data, data FROM blocks b
+            LEFT JOIN block_data bd ON b.height = bd.height
+            WHERE b.height = ?
+        """, (height,))
+
+        row = cursor.fetchone()
+        if not row:
+            return False, "Block not found"
+
+        stored_hash, header_data, block_data = row
+
+        # Verify header hash
+        if header_data:
+            from pantheon.prometheus import sha256d
+            computed_hash = sha256d(header_data)
+            if computed_hash != stored_hash:
+                return False, f"Header hash mismatch: stored={stored_hash.hex()[:16]}, computed={computed_hash.hex()[:16]}"
+
+        # Verify block data can be deserialized
+        if block_data:
+            try:
+                from pantheon.themis import Block
+                block, _ = Block.deserialize(block_data)
+
+                # Verify merkle root
+                if block.header.merkle_root != self._compute_merkle_root(block.transactions):
+                    return False, "Merkle root mismatch"
+
+            except Exception as e:
+                return False, f"Block deserialization failed: {e}"
+
+        return True, None
+
+    def _compute_merkle_root(self, transactions: List) -> bytes:
+        """Compute Merkle root of transactions."""
+        from pantheon.prometheus import sha256d
+
+        if not transactions:
+            return b'\x00' * 32
+
+        hashes = [tx.hash() for tx in transactions]
+
+        while len(hashes) > 1:
+            if len(hashes) % 2 == 1:
+                hashes.append(hashes[-1])
+
+            next_level = []
+            for i in range(0, len(hashes), 2):
+                combined = sha256d(hashes[i] + hashes[i + 1])
+                next_level.append(combined)
+            hashes = next_level
+
+        return hashes[0]
+
     @contextmanager
     def transaction(self):
         """Context manager for database transactions."""

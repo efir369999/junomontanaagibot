@@ -4,11 +4,18 @@ Privacy tiers T0-T3 for balanced throughput and confidentiality.
 
 Based on: ProofOfTime_DAG_Addendum.pdf Section 12
 
-Tiers:
+PRODUCTION-READY:
 - T0 (Public): Addresses + amounts visible (~250 B, ~0.5 ms verify, 1× fee)
 - T1 (Stealth): One-time addresses, amounts visible (~400 B, ~1 ms verify, 2× fee)
-- T2 (Confidential): Stealth + hidden amounts (Pedersen) (~1.2 KB, ~8 ms verify, 5× fee)
-- T3 (Ring): Full RingCT (ring size 11) (~2.5 KB, ~40 ms verify, 10× fee)
+
+EXPERIMENTAL (NOT PRODUCTION-READY):
+- T2 (Confidential): Stealth + hidden amounts - DISABLED BY DEFAULT
+  Requires Bulletproofs which are NOT cryptographically implemented.
+- T3 (Ring): Full RingCT - DISABLED BY DEFAULT
+  Requires Bulletproofs for range proofs.
+
+To enable T2/T3 (UNSAFE - FOR TESTING ONLY):
+    export POT_ENABLE_EXPERIMENTAL_PRIVACY=1
 
 Time is the ultimate proof.
 """

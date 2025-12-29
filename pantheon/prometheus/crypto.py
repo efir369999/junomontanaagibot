@@ -863,9 +863,30 @@ class WesolowskiVDF:
     IMPORTANT: Wesolowski VDF requires 2T sequential squarings total because
     the challenge l = H(g, y) depends on y. This is fundamental - there's no
     way around it. The "2-for-1" trick only works for Pietrzak VDF.
-    
+
     For 10-minute blocks, we target ~5 minutes for y computation and ~5 minutes
     for π computation, ensuring the total is ~10 minutes.
+
+    MODULUS ROTATION PLAN:
+    The current RSA-2048 challenge modulus is secure until factored. However,
+    for long-term security and to mitigate potential unknown attacks, the protocol
+    supports modulus rotation via hard fork:
+
+    1. CURRENT (v1): RSA-2048 challenge ($200,000 prize, unfactored since 1991)
+    2. PLANNED (v2): Class group VDF (no trusted setup, quantum-resistant)
+       - Requires implementation of imaginary quadratic fields
+       - Target: Before quantum computers reach ~4000 qubits
+
+    Rotation procedure (requires hard fork):
+    - Announce new modulus 6 months before activation height
+    - Parallel validation period: both moduli accepted
+    - Switch-over height: only new modulus accepted
+    - Old proofs remain valid for historical blocks
+
+    Hardware calibration:
+    - Run calibrate_for_hardware() on each deployment target
+    - Store IPS (iterations per second) in config
+    - Target: 10-minute blocks with ~5-min y + ~5-min π
     """
 
     # RSA-2048 challenge modulus (unfactored, $200,000 prize from RSA Labs)

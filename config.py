@@ -83,7 +83,11 @@ class ProtocolConstants:
     K_REP: int = 2016  # Signed blocks for max reputation
     
     # Network
-    MIN_NODES: int = 3
+    # SECURITY NOTE: MIN_NODES increased from 3 to 12 for production BFT
+    # BFT requires n >= 3f+1 where f is max Byzantine nodes
+    # With f=3 (tolerate 3 malicious), need n >= 10
+    # Using 12 for safety margin and better decentralization
+    MIN_NODES: int = 12
     ADJUSTMENT_WINDOW: int = 2016  # Blocks for difficulty adjustment
     QUARANTINE_BLOCKS: int = 26_000  # ~180 days penalty
     
@@ -145,12 +149,37 @@ class NetworkConfig:
 class VDFConfig:
     """
     VDF computation configuration.
-    
+
     IMPORTANT: VDF computation requires 2T sequential squarings:
     - Phase 1: T squarings to compute y = g^(2^T)
     - Phase 2: T squarings to compute proof π = g^(2^T/l)
-    
+
     The 'iterations' parameter is T. Total time = 2T/ips seconds.
+
+    SECURITY CONSIDERATIONS (ASIC/Quantum):
+
+    1. ASIC RESISTANCE:
+       - Wesolowski VDF uses RSA group squarings which are inherently sequential
+       - ASIC can accelerate individual squarings by ~10x vs CPU
+       - MITIGATION: Dynamic calibration adjusts iterations to maintain 10-min target
+       - If ASICs appear, network automatically increases iterations
+       - WARNING: An attacker with ASIC advantage could pre-compute VDFs
+
+    2. QUANTUM COMPUTING:
+       - Shor's algorithm breaks RSA in polynomial time
+       - A quantum computer with ~4000 logical qubits could factor 2048-bit RSA
+       - MITIGATION TIMELINE: ~10-15 years until cryptographically relevant QC
+       - FUTURE UPGRADE: Migrate to quantum-resistant VDF (isogeny-based or lattice)
+
+    3. CURRENT SAFETY:
+       - 2048-bit RSA modulus provides ~112-bit classical security
+       - Trusted setup ensures nobody knows factorization
+       - Pre-computation protection: VDF input includes recent block hash
+
+    4. RECOMMENDED MONITORING:
+       - Track VDF completion times across network
+       - Alert if any node consistently completes VDFs faster than expected
+       - Consider increasing modulus_bits to 3072 for higher security margin
     """
     # Base iterations T (will be calibrated dynamically if auto_calibrate=True)
     # Default: ~15M iterations ≈ 5 minutes per phase ≈ 10 minutes total @ 50k ips
@@ -225,13 +254,87 @@ class MempoolConfig:
     max_tx_count: int = 50_000
     min_fee_rate: int = 1  # Seconds per KB
     expiry_hours: int = 336  # 2 weeks
-    
+
     # Replace-by-fee
     rbf_enabled: bool = True
     rbf_min_increment: float = 1.1  # 10% fee increase
 
 
-@dataclass 
+@dataclass
+class CryptoConfig:
+    """
+    Cryptographic backend configuration.
+
+    Supports switching between:
+    - LEGACY: Ed25519 + SHA-256 + Wesolowski VDF (pre-quantum)
+    - POST_QUANTUM: SPHINCS+ + SHA3-256 + SHAKE256/STARK VDF
+    - HYBRID: Both signatures for transition period
+
+    QUANTUM RESISTANCE NOTES:
+
+    1. CURRENT VULNERABILITY (LEGACY mode):
+       - Ed25519 signatures: BROKEN by Shor's algorithm
+       - Wesolowski VDF (RSA): BROKEN by Shor's algorithm
+       - SHA-256: Weakened to ~128-bit by Grover (still usable)
+
+    2. POST-QUANTUM MODE:
+       - SPHINCS+ (NIST FIPS 205): Hash-based, quantum-resistant
+       - SHA3-256 (NIST FIPS 202): Quantum-resistant (Grover gives sqrt speedup)
+       - SHAKE256 VDF + STARK: Hash-based, quantum-resistant
+       - ML-KEM/Kyber (NIST FIPS 203): Lattice-based key encapsulation
+
+    3. MIGRATION STRATEGY:
+       - Phase 1: Use HYBRID mode (both signatures)
+       - Phase 2: Announce deprecation of LEGACY
+       - Phase 3: Switch to POST_QUANTUM only
+
+    4. PERFORMANCE IMPACT:
+       - SPHINCS+ signatures: ~17KB vs 64B (Ed25519)
+       - SPHINCS+ signing: ~100ms vs <1ms (Ed25519)
+       - SPHINCS+ verify: ~10ms vs <1ms (Ed25519)
+       - Blocks will be larger due to signature size
+    """
+    # Backend selection: "legacy", "post_quantum", or "hybrid"
+    backend: str = "legacy"
+
+    # SPHINCS+ variant: "fast" (~17KB sigs) or "secure" (~29KB sigs)
+    sphincs_variant: str = "fast"
+
+    # Hybrid mode: require BOTH signatures to verify (True) or EITHER (False)
+    hybrid_require_both: bool = False
+
+    # VDF backend: "wesolowski" (legacy RSA) or "shake256" (post-quantum)
+    vdf_backend: str = "wesolowski"
+
+    # Enable STARK proofs for SHAKE256 VDF (requires Winterfell)
+    stark_proofs_enabled: bool = True
+
+    # Checkpoint interval for STARK proof generation
+    stark_checkpoint_interval: int = 1000
+
+    def get_crypto_backend(self):
+        """Get CryptoBackend enum value."""
+        from pantheon.prometheus.crypto_provider import CryptoBackend
+
+        backend_map = {
+            "legacy": CryptoBackend.LEGACY,
+            "post_quantum": CryptoBackend.POST_QUANTUM,
+            "hybrid": CryptoBackend.HYBRID,
+        }
+        return backend_map.get(self.backend.lower(), CryptoBackend.LEGACY)
+
+    def initialize_provider(self):
+        """Initialize and return the configured crypto provider."""
+        from pantheon.prometheus.crypto_provider import (
+            get_crypto_provider, set_default_backend
+        )
+
+        backend = self.get_crypto_backend()
+        set_default_backend(backend)
+        return get_crypto_provider(backend)
+
+
+@dataclass
 class NodeConfig:
     """Complete node configuration."""
     # Sub-configurations
@@ -239,6 +342,7 @@ class NodeConfig:
     vdf: VDFConfig = field(default_factory=VDFConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     mempool: MempoolConfig = field(default_factory=MempoolConfig)
+    crypto: CryptoConfig = field(default_factory=CryptoConfig)
     
     # Node identity
     data_dir: str = "~/.proofoftime"
@@ -280,7 +384,15 @@ class NodeConfig:
             config.rpc_port = int(os.getenv("POT_RPC_PORT"))
         if os.getenv("POT_MAX_PEERS"):
             config.network.max_peers = int(os.getenv("POT_MAX_PEERS"))
-            
+
+        # Crypto backend configuration
+        if os.getenv("POT_CRYPTO_BACKEND"):
+            config.crypto.backend = os.getenv("POT_CRYPTO_BACKEND")
+        if os.getenv("POT_SPHINCS_VARIANT"):
+            config.crypto.sphincs_variant = os.getenv("POT_SPHINCS_VARIANT")
+        if os.getenv("POT_VDF_BACKEND"):
+            config.crypto.vdf_backend = os.getenv("POT_VDF_BACKEND")
+
         return config
     
     @classmethod

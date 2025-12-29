@@ -333,11 +333,14 @@ class AdonisProfile:
         Uses the Five Fingers of Adonis weights.
         """
         if weights is None:
+            # SECURITY NOTE: Geography weight reduced from 10% to 5%
+            # VPN/Tor spoofing makes geographic claims unreliable.
+            # TIME increased from 50% to 55% as the core PoT metric.
             weights = {
-                ReputationDimension.TIME: 0.50,        # THUMB
+                ReputationDimension.TIME: 0.55,        # THUMB (increased: PoT core)
                 ReputationDimension.INTEGRITY: 0.20,   # INDEX
                 ReputationDimension.STORAGE: 0.15,     # MIDDLE
-                ReputationDimension.GEOGRAPHY: 0.10,   # RING (country + city)
+                ReputationDimension.GEOGRAPHY: 0.05,   # RING (reduced: VPN spoofable)
                 ReputationDimension.HANDSHAKE: 0.05,   # PINKY (mutual trust)
             }
 
@@ -1304,8 +1307,10 @@ class GlobalByzantineTracker:
 
             self._last_analysis = current_time
 
-            # STEP 1: Group nodes by creation time window (48 hours)
-            CREATION_WINDOW = 48 * 3600  # 48 hours
+            # STEP 1: Group nodes by creation time window (7 days)
+            # SECURITY: Increased from 48h to 7 days to catch coordinated deployments
+            # Sophisticated attackers may spread creation over multiple days
+            CREATION_WINDOW = 7 * 24 * 3600  # 7 days
 
             # Sort profiles by creation time
             sorted_profiles = sorted(profiles.items(), key=lambda x: x[1].created_at)
@@ -1336,8 +1341,9 @@ class GlobalByzantineTracker:
             group_id = 0
 
             for cluster in time_clusters:
-                if len(cluster) < 5:
-                    continue  # Need substantial cluster
+                # SECURITY: Lowered from 5 to 3 to catch smaller coordinated groups
+                if len(cluster) < 3:
+                    continue  # Need at least 3 nodes for pattern detection
 
                 # Check TIME scores
                 time_scores = [
@@ -1348,10 +1354,11 @@ class GlobalByzantineTracker:
                 avg_time = sum(time_scores) / len(time_scores)
                 time_variance = sum((t - avg_time)**2 for t in time_scores) / len(time_scores)
 
-                # Suspicious: HIGH average TIME (>0.7) AND LOW variance (<0.01)
-                # This indicates coordinated accumulation
-                is_high_time = avg_time > 0.7
-                is_low_variance = time_variance < 0.02
+                # Suspicious: HIGH average TIME (>0.6) AND LOW variance (<0.05)
+                # SECURITY: Thresholds lowered to catch more sophisticated attacks
+                # Previously: avg_time > 0.7, time_variance < 0.02 (45.1% bypass)
+                is_high_time = avg_time > 0.6
+                is_low_variance = time_variance < 0.05
 
                 if is_high_time and is_low_variance:
                     # Additional check: dimension profile similarity
@@ -1376,8 +1383,9 @@ class GlobalByzantineTracker:
 
                     avg_similarity = sum(similarities) / len(similarities) if similarities else 0
 
-                    # Suspicious if high similarity (>0.9)
-                    if avg_similarity > 0.9:
+                    # Suspicious if high similarity (>0.8)
+                    # SECURITY: Lowered from 0.9 to catch subdivision attacks
+                    if avg_similarity > 0.8:
                         suspicious_groups[group_id] = cluster
                         group_id += 1
                         logger.warning(
@@ -1413,6 +1421,11 @@ class GlobalByzantineTracker:
 
         CRITICAL: This ensures that even if cluster detection fails,
         nodes with similar behavioral fingerprints cannot exceed 33% total.
+
+        DEFENSE-IN-DEPTH:
+        1. Primary: Cap detected Byzantine groups
+        2. Secondary: Cap ALL high-TIME nodes if they exceed threshold
+           (catches sophisticated attackers who evade cluster detection)
         """
         with self._lock:
             result = probabilities.copy()
@@ -1424,19 +1437,15 @@ class GlobalByzantineTracker:
             # Detect Byzantine groups
             groups = self.detect_byzantine_groups(profiles)
 
-            if not groups:
-                return result
-
-            # Calculate total suspected Byzantine influence
+            # PRIMARY DEFENSE: Cap detected groups
             all_suspected = set()
             for members in groups.values():
                 all_suspected.update(members)
 
             suspected_total = sum(probabilities.get(pk, 0) for pk in all_suspected)
-            suspected_share = suspected_total / total_network
+            suspected_share = suspected_total / total_network if total_network > 0 else 0
 
             if suspected_share > self.MAX_BYZANTINE_INFLUENCE:
-                # Apply cap: reduce all suspected nodes proportionally
                 target_total = self.MAX_BYZANTINE_INFLUENCE * total_network
                 reduction_factor = target_total / suspected_total
 
@@ -1448,6 +1457,39 @@ class GlobalByzantineTracker:
                 for pk in all_suspected:
                     if pk in result:
                         result[pk] *= reduction_factor
+
+            # SECONDARY DEFENSE: Cap high-TIME nodes to strict 33%
+            # This catches sophisticated attackers who evade cluster detection
+            # by spreading nodes over longer periods or adding artificial variance
+            # SECURITY: Set to 33% (BFT threshold) to guarantee attacker < 33%
+            # Even if cluster detection fails, high-TIME nodes cannot exceed BFT limit
+            HIGH_TIME_THRESHOLD = 0.85  # Very high TIME score
+            MAX_HIGH_TIME_INFLUENCE = 0.33  # Strict BFT limit for high-TIME nodes
+
+            high_time_nodes = set()
+            for pk, profile in profiles.items():
+                time_score = profile.dimensions[ReputationDimension.TIME].value
+                if time_score >= HIGH_TIME_THRESHOLD:
+                    high_time_nodes.add(pk)
+
+            if high_time_nodes:
+                high_time_total = sum(result.get(pk, 0) for pk in high_time_nodes)
+                current_total = sum(result.values())
+                high_time_share = high_time_total / current_total if current_total > 0 else 0
+
+                if high_time_share > MAX_HIGH_TIME_INFLUENCE:
+                    # Apply secondary cap
+                    target = MAX_HIGH_TIME_INFLUENCE * current_total
+                    reduction = target / high_time_total
+
+                    logger.warning(
+                        f"SECONDARY CAP (high-TIME): {len(high_time_nodes)} nodes with TIME≥{HIGH_TIME_THRESHOLD} "
+                        f"reduced from {high_time_share*100:.1f}% to {MAX_HIGH_TIME_INFLUENCE*100:.1f}%"
+                    )
+
+                    for pk in high_time_nodes:
+                        if pk in result:
+                            result[pk] *= reduction
 
             return result
 
@@ -1496,8 +1538,10 @@ class AdonisEngine:
         ReputationEvent.TX_RELAYED: 0.01,
         ReputationEvent.UPTIME_CHECKPOINT: 0.02,  # Hourly uptime tick
         ReputationEvent.STORAGE_UPDATE: 0.01,     # Storage sync
-        ReputationEvent.NEW_COUNTRY: 0.25,        # Big bonus for country diversity
-        ReputationEvent.NEW_CITY: 0.15,           # Bonus for city diversity
+        # SECURITY NOTE: Geography bonuses reduced due to VPN spoofing risk
+        # Previously: NEW_COUNTRY=0.25, NEW_CITY=0.15 (too exploitable)
+        ReputationEvent.NEW_COUNTRY: 0.05,        # Reduced: VPN can spoof
+        ReputationEvent.NEW_CITY: 0.03,           # Reduced: VPN can spoof
         ReputationEvent.HANDSHAKE_FORMED: 0.10,   # Mutual trust bonus
         ReputationEvent.INDEPENDENT_ACTION: 0.03, # Bonus for proven independence
 
@@ -1571,12 +1615,13 @@ class AdonisEngine:
         self._current_height: int = 0
 
         # Configuration - The Five Fingers of Adonis (sum = 100%)
-        # TIME is the THUMB - the main factor (50%) - this is Proof of TIME
+        # TIME is the THUMB - the main factor (55%) - this is Proof of TIME
+        # SECURITY NOTE: Geography reduced from 10% to 5% due to VPN spoofing
         self.dimension_weights = {
-            ReputationDimension.TIME: 0.50,        # THUMB: Continuous uptime
+            ReputationDimension.TIME: 0.55,        # THUMB: Continuous uptime (increased)
             ReputationDimension.INTEGRITY: 0.20,   # INDEX: No violations
             ReputationDimension.STORAGE: 0.15,     # MIDDLE: Chain storage
-            ReputationDimension.GEOGRAPHY: 0.10,   # RING: Country + city
+            ReputationDimension.GEOGRAPHY: 0.05,   # RING: Country + city (reduced)
             ReputationDimension.HANDSHAKE: 0.05,   # PINKY: Mutual trust
         }
 

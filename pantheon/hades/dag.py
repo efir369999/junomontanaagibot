@@ -55,6 +55,44 @@ MAX_TX_PER_BLOCK = 2000
 # Minimal fee rate in seconds per KiB (fallback if mempool config not available)
 MIN_FEE_RATE_PER_KIB = 1
 
+# Finality thresholds (explicit state machine)
+FINALITY_CONFIRMATIONS_TENTATIVE = 3   # 3 blue descendants = TENTATIVE
+FINALITY_CONFIRMATIONS_CONFIRMED = 6   # 6 blue descendants = CONFIRMED
+FINALITY_SCORE_FINALIZED = 0.95        # 95% score = FINALIZED
+FINALITY_SCORE_IRREVERSIBLE = 0.99     # 99% score = IRREVERSIBLE
+MAX_REORG_DEPTH = 100                  # Never reorg beyond 100 blocks
+
+
+# ============================================================================
+# BLOCK FINALITY STATE MACHINE
+# ============================================================================
+
+class BlockFinalityState(IntEnum):
+    """
+    Explicit block finality state machine.
+
+    State transitions are one-way (increasing finality only):
+
+    PENDING → TENTATIVE → CONFIRMED → FINALIZED → IRREVERSIBLE
+
+    States:
+    - PENDING: Block just received, no confirmations
+    - TENTATIVE: 3+ blue block descendants (soft confirmation)
+    - CONFIRMED: 6+ blue block descendants (safe for most use cases)
+    - FINALIZED: Finality score ≥ 0.95 (practically safe for high-value)
+    - IRREVERSIBLE: Finality score ≥ 0.99 + VDF checkpoint (absolute)
+
+    Reorg protection:
+    - Blocks in CONFIRMED+ state can only be reorged with competing chain
+      that has higher VDF weight AND was not previously seen
+    - Blocks in IRREVERSIBLE state CANNOT be reorged under any circumstances
+    """
+    PENDING = 0
+    TENTATIVE = 1
+    CONFIRMED = 2
+    FINALIZED = 3
+    IRREVERSIBLE = 4
+
 
 # ============================================================================
 # DAG BLOCK HEADER
@@ -355,59 +393,173 @@ class PHANTOMOrdering:
     
     def __init__(self, k: int = PHANTOM_K):
         self.k = k
-        
+
         # DAG structure
         self.blocks: Dict[bytes, DAGBlock] = {}  # hash -> block
         self.children: Dict[bytes, Set[bytes]] = defaultdict(set)  # hash -> child hashes
         self.tips: Set[bytes] = set()  # Current DAG tips (blocks with no children)
-        
+
         # Blue set
         self.blue_set: Set[bytes] = set()
         self.blue_scores: Dict[bytes, int] = {}  # hash -> blue score
-        
+
         # Ordering cache
         self._ordered_blocks: Optional[List[bytes]] = None
         self._order_dirty: bool = True
-        
+
+        # Finality state machine tracking
+        self.finality_states: Dict[bytes, BlockFinalityState] = {}
+        self.irreversible_blocks: Set[bytes] = set()  # Cannot be reorged ever
+
+        # Orphan block pool (blocks with unknown parents)
+        self.orphans: Dict[bytes, DAGBlock] = {}  # hash -> block
+        self.orphan_by_parent: Dict[bytes, Set[bytes]] = defaultdict(set)  # parent -> orphan hashes
+
         self._lock = threading.RLock()
     
     def add_block(self, block: DAGBlock) -> bool:
         """
         Add block to DAG.
-        
+
         Returns True if block was added, False if already exists or invalid.
+        Blocks with unknown parents are added to orphan pool for later processing.
         """
         with self._lock:
             block_hash = block.block_hash
-            
+
             if block_hash in self.blocks:
                 return False
-            
-            # Validate parents exist
+
+            # Check if all parents exist
+            missing_parents = []
             for parent in block.parents:
-                if parent not in self.blocks and parent != b'\x00' * 32:
-                    logger.warning(f"Block {block_hash.hex()[:16]} has unknown parent")
-                    return False
-            
+                if parent != b'\x00' * 32 and parent not in self.blocks:
+                    missing_parents.append(parent)
+
+            # If missing parents, add to orphan pool
+            if missing_parents:
+                self.orphans[block_hash] = block
+                for parent in missing_parents:
+                    self.orphan_by_parent[parent].add(block_hash)
+                logger.debug(f"Block {block_hash.hex()[:16]} added to orphan pool, waiting for {len(missing_parents)} parents")
+                return False
+
             # Add to DAG
             self.blocks[block_hash] = block
-            
+
+            # Set initial finality state
+            self.finality_states[block_hash] = BlockFinalityState.PENDING
+
             # Update children relationships
             for parent in block.parents:
                 if parent in self.tips:
                     self.tips.remove(parent)
                 self.children[parent].add(block_hash)
-            
+
             # New block is a tip
             self.tips.add(block_hash)
-            
+
             # Update blue set
             self._update_blue_set(block_hash)
-            
+
+            # Update finality states for affected blocks
+            self._update_finality_states(block_hash)
+
+            # Check if any orphans can now be processed
+            self._process_orphans(block_hash)
+
             # Invalidate ordering cache
             self._order_dirty = True
-            
+
             return True
+
+    def _process_orphans(self, new_block_hash: bytes) -> int:
+        """
+        Process orphans that were waiting for this block.
+
+        Returns number of orphans that were successfully added.
+        """
+        added = 0
+        waiting = self.orphan_by_parent.pop(new_block_hash, set())
+
+        for orphan_hash in waiting:
+            if orphan_hash not in self.orphans:
+                continue
+
+            orphan = self.orphans.pop(orphan_hash)
+
+            # Clean up other parent references
+            for parent in orphan.parents:
+                if parent in self.orphan_by_parent:
+                    self.orphan_by_parent[parent].discard(orphan_hash)
+
+            # Try to add again (recursively)
+            if self.add_block(orphan):
+                added += 1
+                logger.debug(f"Orphan {orphan_hash.hex()[:16]} resolved and added to DAG")
+
+        return added
+
+    def _update_finality_states(self, new_block_hash: bytes) -> None:
+        """
+        Update finality states for all affected blocks after a new block is added.
+
+        State transitions:
+        - PENDING → TENTATIVE: 3+ blue descendants
+        - TENTATIVE → CONFIRMED: 6+ blue descendants
+        - CONFIRMED → FINALIZED: finality score ≥ 0.95
+        - FINALIZED → IRREVERSIBLE: finality score ≥ 0.99
+        """
+        # Get all ancestors that might be affected
+        ancestors = self._get_ancestors(new_block_hash)
+
+        for block_hash in ancestors:
+            if block_hash not in self.finality_states:
+                self.finality_states[block_hash] = BlockFinalityState.PENDING
+
+            current_state = self.finality_states[block_hash]
+
+            # Already at maximum finality
+            if current_state == BlockFinalityState.IRREVERSIBLE:
+                continue
+
+            # Count blue descendants
+            descendants = self._get_descendants(block_hash)
+            blue_descendants = len(descendants & self.blue_set)
+
+            # Get finality score
+            score = self.get_finality_score(block_hash)
+
+            # Determine new state (only increases allowed)
+            new_state = current_state
+
+            if score >= FINALITY_SCORE_IRREVERSIBLE:
+                new_state = BlockFinalityState.IRREVERSIBLE
+                self.irreversible_blocks.add(block_hash)
+            elif score >= FINALITY_SCORE_FINALIZED:
+                new_state = max(new_state, BlockFinalityState.FINALIZED)
+            elif blue_descendants >= FINALITY_CONFIRMATIONS_CONFIRMED:
+                new_state = max(new_state, BlockFinalityState.CONFIRMED)
+            elif blue_descendants >= FINALITY_CONFIRMATIONS_TENTATIVE:
+                new_state = max(new_state, BlockFinalityState.TENTATIVE)
+
+            if new_state != current_state:
+                self.finality_states[block_hash] = new_state
+                logger.debug(f"Block {block_hash.hex()[:16]} finality: {current_state.name} → {new_state.name}")
+
+    def get_finality_state(self, block_hash: bytes) -> BlockFinalityState:
+        """Get the finality state of a block."""
+        return self.finality_states.get(block_hash, BlockFinalityState.PENDING)
+
+    def can_reorg(self, block_hash: bytes) -> bool:
+        """
+        Check if a block can be reorganized (removed from main chain).
+
+        Blocks in IRREVERSIBLE state cannot be reorged under any circumstances.
+        """
+        if block_hash in self.irreversible_blocks:
+            return False
+        return self.finality_states.get(block_hash, BlockFinalityState.PENDING) != BlockFinalityState.IRREVERSIBLE
     
     def _get_ancestors(self, block_hash: bytes) -> Set[bytes]:
         """Get all ancestors of a block."""
@@ -767,8 +919,13 @@ class PHANTOMOrdering:
         """
         Compute blocks to disconnect and connect for reorg to new_tip.
 
+        IMPORTANT: Respects finality state machine:
+        - IRREVERSIBLE blocks CANNOT be disconnected under any circumstances
+        - CONFIRMED+ blocks can only be disconnected if reorg depth < MAX_REORG_DEPTH
+
         Returns:
             (blocks_to_disconnect, blocks_to_connect)
+            Empty lists if reorg is rejected due to finality constraints
         """
         with self._lock:
             current_chain = self.get_main_chain()
@@ -785,12 +942,35 @@ class PHANTOMOrdering:
                     break
 
             if common_ancestor is None:
-                # Complete reorg from genesis
+                # Complete reorg from genesis - DANGEROUS, check for irreversible blocks
+                for block_hash in current_chain:
+                    if block_hash in self.irreversible_blocks:
+                        logger.warning(f"Reorg rejected: would disconnect IRREVERSIBLE block {block_hash.hex()[:16]}")
+                        return ([], [])
                 return (current_chain, self._build_chain_from(new_tip))
 
             # Blocks to disconnect (after common ancestor in current chain)
             disconnect_idx = current_chain.index(common_ancestor) + 1
             to_disconnect = current_chain[disconnect_idx:]
+
+            # FINALITY PROTECTION: Check if any block to disconnect is irreversible
+            for block_hash in to_disconnect:
+                if block_hash in self.irreversible_blocks:
+                    logger.warning(f"Reorg rejected: would disconnect IRREVERSIBLE block {block_hash.hex()[:16]}")
+                    return ([], [])
+
+            # REORG DEPTH PROTECTION: Limit maximum reorg depth
+            if len(to_disconnect) > MAX_REORG_DEPTH:
+                logger.warning(f"Reorg rejected: depth {len(to_disconnect)} exceeds MAX_REORG_DEPTH {MAX_REORG_DEPTH}")
+                return ([], [])
+
+            # CONFIRMED BLOCK PROTECTION: Warn if disconnecting confirmed blocks
+            confirmed_count = sum(
+                1 for h in to_disconnect
+                if self.finality_states.get(h, BlockFinalityState.PENDING) >= BlockFinalityState.CONFIRMED
+            )
+            if confirmed_count > 0:
+                logger.warning(f"Reorg will disconnect {confirmed_count} CONFIRMED+ blocks - this is unusual")
 
             # Blocks to connect (from common ancestor to new tip)
             to_connect = []

@@ -25,14 +25,18 @@ from dataclasses import dataclass
 
 logger = logging.getLogger("proof_of_time.ristretto")
 
-# Try to use nacl for Edwards curve operations
+# PyNaCl is REQUIRED for Ristretto operations
+# The fallback implementations are cryptographically BROKEN
 try:
     import nacl.bindings
     from nacl.bindings import crypto_scalarmult_ed25519_noclamp, crypto_core_ed25519_add
     NACL_AVAILABLE = True
 except ImportError:
     NACL_AVAILABLE = False
-    logger.warning("PyNaCl not available for Ristretto, using fallback")
+    raise ImportError(
+        "PyNaCl is REQUIRED for Ristretto255 operations. "
+        "Install with: pip install PyNaCl"
+    )
 
 
 # ============================================================================
@@ -86,16 +90,24 @@ class RistrettoPoint:
     def __mul__(self, scalar: Union[int, bytes]) -> 'RistrettoPoint':
         """Scalar multiplication."""
         if isinstance(scalar, int):
-            scalar = scalar % L
-            scalar = scalar.to_bytes(32, 'little')
-        
+            scalar_int = scalar % L
+            # Handle zero scalar - result is identity
+            if scalar_int == 0:
+                return RistrettoPoint.identity()
+            scalar = scalar_int.to_bytes(32, 'little')
+        else:
+            # Check if bytes represent zero
+            if scalar == b'\x00' * 32:
+                return RistrettoPoint.identity()
+
         if NACL_AVAILABLE:
             try:
                 result = crypto_scalarmult_ed25519_noclamp(scalar, self.data)
                 return RistrettoPoint(result)
-            except Exception:
-                pass
-        
+            except Exception as e:
+                # Log the error for debugging but don't expose internals
+                logger.debug(f"nacl scalar_mult failed: {e}")
+
         return self._mul_fallback(scalar)
     
     def __rmul__(self, scalar: Union[int, bytes]) -> 'RistrettoPoint':
@@ -154,14 +166,17 @@ class RistrettoPoint:
     
     def _add_fallback(self, other: 'RistrettoPoint') -> 'RistrettoPoint':
         """Fallback point addition when nacl unavailable."""
-        # This is a simplified version - production needs proper implementation
-        combined = hashlib.sha512(self.data + other.data).digest()[:32]
-        return RistrettoPoint(combined)
-    
+        raise RuntimeError(
+            "PyNaCl is required for Ristretto point operations. "
+            "Install with: pip install PyNaCl"
+        )
+
     def _mul_fallback(self, scalar: bytes) -> 'RistrettoPoint':
-        """Fallback scalar multiplication."""
-        combined = hashlib.sha512(scalar + self.data).digest()[:32]
-        return RistrettoPoint(combined)
+        """Fallback scalar multiplication when nacl unavailable."""
+        raise RuntimeError(
+            "PyNaCl is required for Ristretto point operations. "
+            "Install with: pip install PyNaCl"
+        )
 
 
 # ============================================================================
@@ -303,18 +318,26 @@ class RistrettoGenerators:
     @classmethod
     def _hash_to_point(cls, data: bytes) -> RistrettoPoint:
         """
-        Hash to Ristretto point (Elligator2).
-        
-        This is a simplified version - production needs proper Elligator.
+        Hash to Ristretto point using Elligator2-style mapping.
+
+        Uses libsodium's crypto_core_ed25519_from_uniform which:
+        - Takes 32 uniformly random bytes
+        - Produces a valid Ed25519 point
+        - Is deterministic (same input = same point)
         """
-        # Hash to 64 bytes then reduce
-        h = hashlib.sha512(data).digest()
-        
-        # Use first 32 bytes, set high bit patterns for valid point
-        point_bytes = bytearray(h[:32])
-        point_bytes[31] &= 0x7f  # Clear top bit
-        
-        return RistrettoPoint(bytes(point_bytes))
+        # Hash to 32 bytes for uniform input
+        h = hashlib.sha256(data).digest()
+
+        if NACL_AVAILABLE:
+            # Use libsodium's proper hash-to-point
+            # crypto_core_ed25519_from_uniform takes 32 bytes
+            point = nacl.bindings.crypto_core_ed25519_from_uniform(h)
+            return RistrettoPoint(point)
+        else:
+            raise RuntimeError(
+                "PyNaCl is required for hash-to-point. "
+                "Install with: pip install PyNaCl"
+            )
 
 
 # ============================================================================

@@ -601,6 +601,128 @@ class TestSerializationRoundtrips(unittest.TestCase):
         self.assertEqual(restored.evidence_block1, evidence.evidence_block1)
         self.assertEqual(restored.timestamp, evidence.timestamp)
 
+    def test_transaction_serialization_roundtrip(self):
+        """Transaction should serialize and deserialize with hash invariant."""
+        from pantheon.themis.structures import Transaction, TxType
+        from pantheon.prometheus.crypto import sha256, sha256d
+
+        # Create transaction with multiple outputs
+        tx = Transaction()
+        tx.version = 1
+        tx.tx_type = TxType.COINBASE
+        tx.inputs = []
+        tx.outputs = []
+        tx.fee = 1000
+        tx.extra = b"test_extra_data"
+
+        # First serialization
+        data1 = tx.serialize()
+        hash1 = sha256d(data1)
+
+        # Deserialize
+        restored, offset = Transaction.deserialize(data1)
+
+        # Second serialization
+        data2 = restored.serialize()
+        hash2 = sha256d(data2)
+
+        # Hash invariant: serialize → deserialize → serialize should give same hash
+        self.assertEqual(hash1, hash2, "Transaction hash invariant violated")
+        self.assertEqual(data1, data2, "Transaction data mismatch after roundtrip")
+        self.assertEqual(offset, len(data1), "Deserialization did not consume all bytes")
+
+    def test_dag_block_serialization_roundtrip(self):
+        """DAGBlock should serialize and deserialize correctly."""
+        from pantheon.hades.dag import DAGBlock, DAGBlockHeader
+        from pantheon.prometheus.crypto import sha256d
+
+        # Create DAG block header
+        header = DAGBlockHeader()
+        header.version = 1
+        header.parents = [b'\x01' * 32, b'\x02' * 32]  # Two parents
+        header.merkle_root = b'\x03' * 32
+        header.timestamp = int(time.time())
+        header.vdf_input = b'\x04' * 32
+        header.vdf_output = b'\x05' * 256
+        header.vdf_proof = b'\x06' * 256
+        header.vdf_iterations = 1000000
+        header.vdf_weight = 500000
+        header.vrf_output = b'\x07' * 32
+        header.vrf_proof = b'\x08' * 80
+        header.producer_pubkey = b'\x09' * 32
+        header.producer_signature = b'\x0a' * 64
+        header.node_weight = 0.75
+
+        # Create block
+        block = DAGBlock(header=header, transactions=[])
+
+        # First serialization
+        data1 = block.serialize()
+
+        # Deserialize
+        restored, offset = DAGBlock.deserialize(data1)
+
+        # Second serialization
+        data2 = restored.serialize()
+
+        # Verify invariants
+        self.assertEqual(data1, data2, "DAGBlock data mismatch after roundtrip")
+        self.assertEqual(len(restored.header.parents), 2, "Parent count mismatch")
+        self.assertEqual(restored.header.vdf_weight, 500000, "VDF weight mismatch")
+
+    def test_tiered_output_serialization_roundtrip(self):
+        """TieredOutput should serialize and deserialize correctly for all tiers."""
+        from pantheon.nyx.tiered_privacy import TieredOutput, PrivacyTier
+
+        # T0 Public output
+        output_t0 = TieredOutput(
+            tier=PrivacyTier.T0_PUBLIC,
+            public_address=b'\x01' * 32,
+            public_amount=100000,
+            output_index=0
+        )
+
+        data1 = output_t0.serialize()
+        restored_t0, offset = TieredOutput.deserialize(data1)
+        data2 = restored_t0.serialize()
+
+        self.assertEqual(data1, data2, "T0 output roundtrip failed")
+        self.assertEqual(restored_t0.public_amount, 100000)
+
+        # T1 Stealth output
+        output_t1 = TieredOutput(
+            tier=PrivacyTier.T1_STEALTH,
+            one_time_address=b'\x02' * 32,
+            tx_public_key=b'\x03' * 32,
+            public_amount=50000,
+            output_index=1
+        )
+
+        data1 = output_t1.serialize()
+        restored_t1, offset = TieredOutput.deserialize(data1)
+        data2 = restored_t1.serialize()
+
+        self.assertEqual(data1, data2, "T1 output roundtrip failed")
+        self.assertEqual(restored_t1.one_time_address, b'\x02' * 32)
+
+    def test_lsag_signature_serialization_roundtrip(self):
+        """LSAGSignature should serialize and deserialize correctly."""
+        from pantheon.nyx.privacy import LSAGSignature
+
+        sig = LSAGSignature(
+            key_image=b'\x01' * 32,
+            c0=b'\x02' * 32,
+            responses=[b'\x03' * 32, b'\x04' * 32, b'\x05' * 32]
+        )
+
+        data1 = sig.serialize()
+        restored = LSAGSignature.deserialize(data1)
+        data2 = restored.serialize()
+
+        self.assertEqual(data1, data2, "LSAGSignature roundtrip failed")
+        self.assertEqual(len(restored.responses), 3)
+        self.assertEqual(restored.key_image, b'\x01' * 32)
+
 
 class TestBootstrapMechanism(unittest.TestCase):
     """Test bootstrap mechanism for small networks."""
@@ -620,12 +742,13 @@ class TestBootstrapMechanism(unittest.TestCase):
         mode = bootstrap.check_mode()
         self.assertEqual(mode, BootstrapMode.BOOTSTRAP)
         
-        # Add nodes
-        for i in range(3):
+        # Add nodes - need MIN_NODES (12) for normal mode
+        # (Previously was 3, increased to 12 for BFT security)
+        for i in range(12):
             _, pk = Ed25519.generate_keypair()
             engine.register_node(pk, stored_blocks=1000)
-        
-        # With 3 nodes, should be in normal mode
+
+        # With 12 nodes, should be in normal mode
         mode = bootstrap.check_mode()
         self.assertEqual(mode, BootstrapMode.NORMAL)
     

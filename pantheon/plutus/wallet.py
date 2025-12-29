@@ -951,13 +951,38 @@ class Wallet:
             
             # Encrypt with AES-256-GCM
             encrypted = WalletCrypto.encrypt(plaintext, password)
-            
-            # Write to file atomically (write to temp, then rename)
+
+            # Write to file atomically with fsync for crash safety
+            # This ensures data is on disk before rename (prevents corruption on crash)
             temp_path = path + '.tmp'
-            Path(temp_path).write_bytes(encrypted)
-            Path(temp_path).rename(path)
-            
-            logger.info(f"Wallet saved to {path} (encrypted)")
+            try:
+                import os
+                with open(temp_path, 'wb') as f:
+                    f.write(encrypted)
+                    f.flush()
+                    os.fsync(f.fileno())
+
+                # Atomic rename (guaranteed atomic on POSIX, nearly atomic on Windows)
+                os.replace(temp_path, path)
+
+                # Sync directory to ensure rename is persisted
+                dir_path = os.path.dirname(os.path.abspath(path)) or '.'
+                try:
+                    dir_fd = os.open(dir_path, os.O_RDONLY | os.O_DIRECTORY)
+                    os.fsync(dir_fd)
+                    os.close(dir_fd)
+                except (OSError, AttributeError):
+                    pass  # Windows doesn't support directory fsync
+
+            except Exception as e:
+                # Clean up temp file on error
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+                raise
+
+            logger.info(f"Wallet saved to {path} (encrypted, atomic)")
     
     def load(self, path: str, password: str) -> bool:
         """

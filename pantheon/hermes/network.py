@@ -99,6 +99,12 @@ SUBNET_PREFIX_IPV6 = 48  # /48 subnet
 MIN_OUTBOUND_CONNECTIONS = 8
 MAX_INBOUND_RATIO = 0.7  # Max 70% inbound connections
 
+# Reconnection with exponential backoff
+RECONNECT_INITIAL_DELAY = 1.0      # 1 second initial delay
+RECONNECT_MAX_DELAY = 300.0        # 5 minutes maximum delay
+RECONNECT_BACKOFF_MULTIPLIER = 2.0 # Double delay on each failure
+RECONNECT_MAX_ATTEMPTS = 10        # Give up after 10 attempts
+
 # Noise Protocol constants
 NOISE_PROTOCOL_NAME = b"Noise_XX_25519_ChaChaPoly_SHA256"
 NOISE_MAX_MESSAGE_SIZE = 65535
@@ -1070,7 +1076,12 @@ class P2PNode:
         self.seen_txs: Set[bytes] = set()
         self.seen_blocks: Set[bytes] = set()
         self.pending_requests: Dict[bytes, Tuple[str, float]] = {}
-        
+
+        # Reconnection tracking with exponential backoff
+        # Maps peer_id -> (attempts, next_retry_time, current_delay)
+        self.reconnect_state: Dict[str, Tuple[int, float, float]] = {}
+        self.important_peers: Set[Tuple[str, int]] = set()  # Peers we always want connected
+
         # Threading
         self._lock = threading.RLock()
         self._threads: List[threading.Thread] = []
@@ -1191,13 +1202,16 @@ class P2PNode:
                 
                 # Check connection health
                 self._check_connections()
-                
+
+                # Process pending reconnections (exponential backoff)
+                self._process_reconnections()
+
                 time.sleep(10)
-                
+
             except Exception as e:
                 logger.error(f"Maintenance loop error: {e}")
                 time.sleep(1)
-    
+
     def _discovery_loop(self):
         """Peer discovery loop."""
         last_discovery = 0
@@ -1339,12 +1353,72 @@ class P2PNode:
         return True
     
     def _remove_peer(self, peer: Peer):
-        """Remove peer from tracking."""
+        """Remove peer from tracking and schedule reconnection if important."""
         with self._lock:
             if peer.id in self.peers:
                 del self.peers[peer.id]
             self.eclipse_protection.unregister_connection(peer.id, peer.ip)
-    
+
+            # Schedule reconnection for important peers
+            addr = (peer.ip, peer.port)
+            if addr in self.important_peers:
+                self._schedule_reconnect(addr)
+
+    def add_important_peer(self, address: Tuple[str, int]):
+        """Mark a peer as important (will auto-reconnect on disconnect)."""
+        self.important_peers.add(address)
+
+    def _schedule_reconnect(self, address: Tuple[str, int]):
+        """Schedule a reconnection with exponential backoff."""
+        peer_id = f"{address[0]}:{address[1]}"
+
+        with self._lock:
+            if peer_id in self.reconnect_state:
+                attempts, _, delay = self.reconnect_state[peer_id]
+                if attempts >= RECONNECT_MAX_ATTEMPTS:
+                    logger.warning(f"Giving up on reconnecting to {peer_id} after {attempts} attempts")
+                    return
+
+                # Exponential backoff
+                new_delay = min(delay * RECONNECT_BACKOFF_MULTIPLIER, RECONNECT_MAX_DELAY)
+                next_retry = time.time() + new_delay
+                self.reconnect_state[peer_id] = (attempts + 1, next_retry, new_delay)
+                logger.info(f"Scheduled reconnect to {peer_id} in {new_delay:.1f}s (attempt {attempts + 1})")
+            else:
+                # First reconnection attempt
+                next_retry = time.time() + RECONNECT_INITIAL_DELAY
+                self.reconnect_state[peer_id] = (1, next_retry, RECONNECT_INITIAL_DELAY)
+                logger.info(f"Scheduled reconnect to {peer_id} in {RECONNECT_INITIAL_DELAY}s (attempt 1)")
+
+    def _process_reconnections(self):
+        """Process pending reconnection attempts."""
+        now = time.time()
+        to_reconnect = []
+
+        with self._lock:
+            for peer_id, (attempts, next_retry, delay) in list(self.reconnect_state.items()):
+                if now >= next_retry:
+                    # Parse peer_id back to address tuple
+                    parts = peer_id.rsplit(':', 1)
+                    if len(parts) == 2:
+                        try:
+                            address = (parts[0], int(parts[1]))
+                            to_reconnect.append((peer_id, address))
+                        except ValueError:
+                            del self.reconnect_state[peer_id]
+
+        for peer_id, address in to_reconnect:
+            logger.info(f"Attempting reconnection to {peer_id}")
+            if self.connect_to_peer(address):
+                # Success - clear reconnect state
+                with self._lock:
+                    if peer_id in self.reconnect_state:
+                        del self.reconnect_state[peer_id]
+                logger.info(f"Reconnected to {peer_id}")
+            else:
+                # Failed - schedule next attempt (already incremented in _schedule_reconnect)
+                self._schedule_reconnect(address)
+
     def _send_version(self, peer: Peer):
         """Send version message."""
         version = VersionPayload(

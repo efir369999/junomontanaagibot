@@ -1,13 +1,17 @@
 """
 Proof of Time - Privacy Module
-Production-grade implementation of privacy primitives.
 
-Includes:
-- LSAG (Linkable Spontaneous Anonymous Group) signatures - REAL implementation
+PRODUCTION-READY:
+- LSAG (Linkable Spontaneous Anonymous Group) signatures
 - Stealth addresses (CryptoNote-style)
 - Pedersen commitments with proper curve operations
-- RingCT (Ring Confidential Transactions)
-- Bulletproofs range proofs (production structure)
+
+EXPERIMENTAL (NOT PRODUCTION-READY):
+- Bulletproofs range proofs - STRUCTURAL PLACEHOLDER ONLY
+  The Inner Product Argument is NOT cryptographically implemented.
+  DO NOT use T2/T3 transactions in production without replacing
+  with audited library (bulletproofs-rs via FFI).
+- RingCT - depends on Bulletproofs for range proofs
 
 Reference:
 - CryptoNote v2.0
@@ -1172,7 +1176,26 @@ class Pedersen:
 
 
 # ============================================================================
-# BULLETPROOFS RANGE PROOFS - PRODUCTION STRUCTURE
+# ============================================================================
+# BULLETPROOFS RANGE PROOFS - EXPERIMENTAL / STRUCTURAL PLACEHOLDER
+# ============================================================================
+#
+# WARNING: This is NOT a production-ready Bulletproofs implementation!
+#
+# The Inner Product Argument (IPA) generates RANDOM values instead of
+# computing cryptographically valid proofs. The verify() function only
+# checks structural validity, NOT cryptographic soundness.
+#
+# For production use, you MUST:
+# 1. Replace with audited library (bulletproofs-rs, dalek-bulletproofs)
+# 2. Use FFI bindings (PyO3) to call Rust implementation
+# 3. Run full test vectors from the Bulletproofs paper
+#
+# Current status:
+# - Prove: Generates structurally valid but cryptographically FAKE proofs
+# - Verify: Only validates structure, NOT cryptographic soundness
+# - Batch verify: Same limitation as single verify
+#
 # ============================================================================
 
 @dataclass
@@ -1275,20 +1298,24 @@ class RangeProof:
 
 class Bulletproof:
     """
-    Bulletproofs range proof implementation.
-    
-    Properties:
-    - Proves v ∈ [0, 2^n) without revealing v
-    - Proof size: O(log n) - approximately 64 * log2(n) + 224 bytes
-    - Verification: O(n) group operations
-    - Supports batch verification for efficiency
-    - Supports aggregated proofs for multiple values
-    
+    Bulletproofs range proof - EXPERIMENTAL / STRUCTURAL PLACEHOLDER.
+
+    ⚠️  WARNING: NOT CRYPTOGRAPHICALLY SECURE ⚠️
+
+    This implementation is for STRUCTURE AND TESTING ONLY.
+    The Inner Product Argument (IPA) is NOT implemented - it generates
+    random values. The verify() only checks structural validity.
+
+    DO NOT USE FOR REAL FUNDS. T2/T3 transactions using this will
+    NOT provide actual range proof security.
+
+    For production, replace with:
+    - bulletproofs-rs via PyO3 FFI
+    - dalek-bulletproofs Python bindings
+    - Any audited Bulletproofs library
+
     Reference: "Bulletproofs: Short Proofs for Confidential Transactions"
     by Bünz, Bootle, Boneh, Poelstra, Wuille, Maxwell (2018)
-    
-    Note: This is a structural implementation. For production,
-    use bulletproofs-rs via FFI or similar audited library.
     """
     
     BIT_LENGTH = 64  # Prove value in [0, 2^64)

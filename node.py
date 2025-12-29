@@ -65,40 +65,86 @@ class ChainTip:
 
 class Mempool:
     """
-    Transaction memory pool.
-    
+    Transaction memory pool with spam resistance.
+
     Manages unconfirmed transactions with:
     - Fee-based prioritization
-    - Double-spend detection
-    - Size limits
-    - Expiration
+    - Double-spend detection via key images
+    - Size limits (default 300 MB)
+    - Minimum fee rate enforcement
+    - Dust output rejection
+    - Rate limiting per sender
+    - Expiration (24 hours default)
     """
-    
+
+    # Spam resistance constants
+    MIN_FEE_RATE = 1  # Minimum fee per KB (in base units)
+    DUST_THRESHOLD = 100  # Minimum output value to prevent dust attacks
+    MAX_TX_SIZE = 1_000_000  # 1 MB max transaction size
+    MAX_TXS_PER_SENDER = 100  # Max pending txs per sender pubkey
+    TX_EXPIRATION_SECONDS = 86400  # 24 hours
+
     def __init__(self, db: BlockchainDB, max_size_mb: int = 300):
         self.db = db
         self.max_size = max_size_mb * 1024 * 1024
-        
+
         self.transactions: Dict[bytes, Transaction] = {}
         self.by_fee_rate: List[bytes] = []  # Sorted by fee rate
         self.key_images: Set[bytes] = set()
-        
+
+        # Spam resistance tracking
+        self.tx_by_sender: Dict[bytes, Set[bytes]] = {}  # sender_pubkey -> set of txids
+        self.tx_timestamps: Dict[bytes, float] = {}  # txid -> timestamp
+
         self.current_size = 0
         self._lock = threading.RLock()
     
     def add_transaction(self, tx: Transaction) -> bool:
         """
-        Add transaction to mempool.
-        
+        Add transaction to mempool with spam resistance.
+
         Returns True if added successfully.
+
+        Spam resistance checks:
+        1. Maximum transaction size
+        2. Minimum fee rate
+        3. Dust output rejection
+        4. Rate limiting per sender
+        5. Double-spend detection
         """
         with self._lock:
             txid = tx.hash()
-            
+
             # Already have it?
             if txid in self.transactions:
                 return True
-            
-            # Check key images for double-spend
+
+            # SPAM CHECK 1: Transaction size limit
+            tx_size = len(tx.serialize())
+            if tx_size > self.MAX_TX_SIZE:
+                logger.warning(f"Mempool reject: tx size {tx_size} > max {self.MAX_TX_SIZE}")
+                return False
+
+            # SPAM CHECK 2: Minimum fee rate
+            fee_rate = (tx.fee * 1024) // tx_size if tx_size > 0 else 0
+            if fee_rate < self.MIN_FEE_RATE:
+                logger.debug(f"Mempool reject: fee rate {fee_rate} < min {self.MIN_FEE_RATE}")
+                return False
+
+            # SPAM CHECK 3: Dust output rejection
+            for out in tx.outputs:
+                if hasattr(out, 'amount') and out.amount < self.DUST_THRESHOLD:
+                    logger.debug(f"Mempool reject: dust output {out.amount} < {self.DUST_THRESHOLD}")
+                    return False
+
+            # SPAM CHECK 4: Rate limit per sender
+            sender_key = tx.inputs[0].key_image[:32] if tx.inputs else b''
+            if sender_key in self.tx_by_sender:
+                if len(self.tx_by_sender[sender_key]) >= self.MAX_TXS_PER_SENDER:
+                    logger.warning(f"Mempool reject: sender rate limit ({self.MAX_TXS_PER_SENDER} pending)")
+                    return False
+
+            # SPAM CHECK 5: Double-spend detection via key images
             for inp in tx.inputs:
                 if inp.key_image in self.key_images:
                     logger.warning(f"Mempool reject: double-spend {txid.hex()[:16]}")
@@ -106,13 +152,10 @@ class Mempool:
                 if self.db.is_key_image_spent(inp.key_image):
                     logger.warning(f"Mempool reject: spent key image {txid.hex()[:16]}")
                     return False
-            
-            # Validate transaction
+
+            # Validate transaction cryptography
             if not self._validate_transaction(tx):
                 return False
-            
-            # Add to mempool
-            tx_size = len(tx.serialize())
             
             # Evict if needed
             while self.current_size + tx_size > self.max_size and self.by_fee_rate:
@@ -120,40 +163,73 @@ class Mempool:
             
             self.transactions[txid] = tx
             self.current_size += tx_size
-            
+
             # Track key images
             for inp in tx.inputs:
                 self.key_images.add(inp.key_image)
-            
+
+            # Track sender for rate limiting
+            if sender_key:
+                if sender_key not in self.tx_by_sender:
+                    self.tx_by_sender[sender_key] = set()
+                self.tx_by_sender[sender_key].add(txid)
+
+            # Track timestamp for expiration
+            self.tx_timestamps[txid] = time.time()
+
             # Insert sorted by fee rate
             fee_rate = tx.fee / tx_size if tx_size > 0 else 0
             self._insert_sorted(txid, fee_rate)
-            
+
             # Store in database
             self.db.add_to_mempool(tx)
-            
+
             logger.debug(f"Added tx to mempool: {txid.hex()[:16]}...")
             return True
-    
+
     def remove_transaction(self, txid: bytes):
         """Remove transaction from mempool."""
         with self._lock:
             if txid not in self.transactions:
                 return
-            
+
             tx = self.transactions[txid]
-            
+
             # Remove key images
             for inp in tx.inputs:
                 self.key_images.discard(inp.key_image)
-            
+
+            # Remove sender tracking
+            sender_key = tx.inputs[0].key_image[:32] if tx.inputs else b''
+            if sender_key in self.tx_by_sender:
+                self.tx_by_sender[sender_key].discard(txid)
+                if not self.tx_by_sender[sender_key]:
+                    del self.tx_by_sender[sender_key]
+
+            # Remove timestamp
+            self.tx_timestamps.pop(txid, None)
+
             # Remove from structures
             del self.transactions[txid]
             if txid in self.by_fee_rate:
                 self.by_fee_rate.remove(txid)
-            
+
             self.current_size -= len(tx.serialize())
             self.db.remove_from_mempool(txid)
+
+    def expire_old_transactions(self):
+        """Remove expired transactions (older than TX_EXPIRATION_SECONDS)."""
+        now = time.time()
+        expired = []
+
+        with self._lock:
+            for txid, timestamp in list(self.tx_timestamps.items()):
+                if now - timestamp > self.TX_EXPIRATION_SECONDS:
+                    expired.append(txid)
+
+        for txid in expired:
+            logger.debug(f"Expiring old tx: {txid.hex()[:16]}...")
+            self.remove_transaction(txid)
     
     def get_transactions_for_block(self, max_size: int = 1_000_000) -> List[Transaction]:
         """Get highest fee transactions for block."""
