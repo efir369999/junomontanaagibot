@@ -97,5 +97,8 @@ noise_keys/
 config.json
 
 .claude/
-*.txt
-adonis_state.bin
+
+# Pantheon state files (each god stores in own directory)
+pantheon/*/*.bin
+pantheon/*/*.db
+pantheon/*/*.state

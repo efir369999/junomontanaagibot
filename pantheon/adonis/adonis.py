@@ -535,9 +535,13 @@ class AdonisEngine:
         ReputationEvent.SPAM_DETECTED: 7 * 86400,   # 7 days
     }
 
-    def __init__(self, storage=None, data_dir: str = "."):
+    def __init__(self, storage=None, data_dir: str = None):
         self.profiles: Dict[bytes, AdonisProfile] = {}
         self.storage = storage
+        # Default data_dir is the adonis module directory
+        if data_dir is None:
+            import os
+            data_dir = os.path.dirname(os.path.abspath(__file__))
         self.data_dir = data_dir
         self._lock = threading.RLock()
 
