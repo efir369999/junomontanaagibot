@@ -34,9 +34,9 @@ Consensus based on time, not capital.
 
 **Layer 2 — Proof of Time.** VDF checkpoints every 10 minutes. Finality.
 
-### Leader Selection
+### Block Production (DAG)
 
-ECVRF selects block producer. Probability proportional to Adonis score.
+In DAG architecture, there is no leader selection. Any eligible node can produce blocks. ECVRF determines eligibility. PHANTOM orders blocks.
 
 ### Adonis Score (v4.0+)
 
@@ -56,9 +56,9 @@ TIME measured in Bitcoin blocks. Resets at each halving. Capital irrelevant.
 
 Each node selects exactly 12 trust partners. Attack one → collective slashing.
 
-### Hal Humanity System (v4.1)
+### HAL: Human Analyse Language (v4.1)
 
-Proof of humanity, not just proof of time. Named after Hal Finney.
+Proof of humanity, not just proof of time. Named after Hal Finney (1956-2014).
 
 | Tier | Max Apostles | Weight | Proof |
 |------|--------------|--------|-------|
@@ -138,7 +138,7 @@ See [SECURITY_MODEL.md](SECURITY_MODEL.md) for full details.
 | THEMIS | Validation | Block/TX verification |
 | IRIS | RPC | JSON-RPC 2.0 interface |
 | APOSTLES | Trust | 12 Apostle handshakes, slashing |
-| HAL | Humanity | Reputation, Sybil detection, behavioral analysis |
+| HAL | Human Analyse Language | Reputation, Sybil detection, behavioral analysis |
 
 ---
 
@@ -197,7 +197,7 @@ See [audits/](audits/) for full reports.
 | v3.0 | ✓ Done | Post-quantum crypto (SPHINCS+, ML-KEM) |
 | v3.1 | ✓ Done | Network hardening, VPN blocking, rate limits |
 | v4.0 | ✓ Done | 12 Apostles, EPOCHS, Bitcoin Oracle |
-| v4.1 | ✓ Done | Hal Humanity System (Sybil resistance) |
+| v4.1 | ✓ Done | HAL: Human Analyse Language (Sybil resistance) |
 | v4.2 | ✓ Done | Bitcoin-anchored TIME dimension |
 | v4.3 | ✓ Done | Module consolidation: ADAM, HAL, PAUL, 11 Gods |
 | v5.0 | Planned | Mainnet launch, mobile wallet |

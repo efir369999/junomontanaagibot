@@ -17,7 +17,7 @@ A peer-to-peer quantum-resistant electronic cash system without reliance on fina
 - **Proof of Time** — VDF-based consensus where time cannot be bought or accelerated
 - **11 Pantheon Gods** — Modular architecture with clear separation of concerns
 - **12 Apostles** — Trust network with collective accountability
-- **Hal Humanity System** — Sybil resistance through graduated trust and time-locked proofs
+- **HAL (Human Analyse Language)** — Sybil resistance through graduated trust and time-locked proofs
 - **Bitcoin Anchoring** — TIME dimension tied to 210,000 BTC blocks per epoch
 - **Post-Quantum Cryptography** — SPHINCS+, SHA3-256, SHAKE256 VDF
 
@@ -34,7 +34,7 @@ Humanity cannot be faked across Bitcoin halvings—only proven.
 4. [Network Architecture](#4-network-architecture)
 5. [The Five Fingers of Adonis](#5-the-five-fingers-of-adonis)
 6. [The Twelve Apostles](#6-the-twelve-apostles)
-7. [The Hal Humanity System](#7-the-hal-humanity-system)
+7. [HAL: Human Analyse Language](#7-hal-human-analyse-language)
 8. [Anti-Cluster Protection](#8-anti-cluster-protection)
 9. [Post-Quantum Cryptography](#9-post-quantum-cryptography)
 10. [Attack Resistance](#10-attack-resistance)
@@ -68,9 +68,9 @@ Current cryptographic systems face an existential threat: quantum computers. Sho
 
 TIME proves existence, not uniqueness. An attacker can create 100 keypairs, wait 4 years, and control a coordinated network.
 
-The Hal Humanity System solves this: proving humanity, not just cryptographic identity.
+HAL (Human Analyse Language) solves this: proving humanity, not just cryptographic identity.
 
-Named after Hal Finney (1956-2014), who received the first Bitcoin transaction and understood Sybil resistance before anyone else.
+Named after Hal Finney (1956-2014), who received the first Bitcoin transaction and understood Sybil resistance before anyone else. "Running bitcoin" — his first tweet, January 2009.
 
 ---
 
@@ -89,6 +89,8 @@ In Proof of Work, hash rate is purchasable. In Proof of Stake, the problem is st
 
 ## 3. ADAM: God of Time
 
+**ADAM = Anchored Deterministic Asynchronous Mesh**
+
 ADAM implements 7 temporal levels for time synchronization with Bitcoin as primary oracle.
 
 ### 3.1 Seven Temporal Levels
@@ -98,7 +100,7 @@ ADAM implements 7 temporal levels for time synchronization with Bitcoin as prima
 │  ADAM: GOD OF TIME - 7 TEMPORAL LEVELS                      │
 ├─────────────────────────────────────────────────────────────┤
 │  Level 0: NODE_UTC         Hardware clock (UTC)             │
-│  Level 1: GLOBAL_NTP       12 national NTP laboratories     │
+│  Level 1: GLOBAL_NTP       13 national metrology labs       │
 │  Level 2: MEMPOOL_TIME     Bitcoin mempool observation      │
 │  Level 3: BLOCK_TIME       Bitcoin block confirmation       │
 │  Level 4: BITCOIN_ACTIVE   Normal operation, VDF not needed │
@@ -118,23 +120,25 @@ def get_node_utc() -> int:
 ```
 
 **Level 1: GLOBAL_NTP**
-12 national NTP laboratories for global time consensus:
+13 national metrology laboratories for global time consensus:
 
 ```python
-NTP_SERVERS = [
-    "time.nist.gov",         # NIST, USA
-    "time.windows.com",      # Microsoft
-    "time.apple.com",        # Apple
-    "ntp.ubuntu.com",        # Canonical
-    "pool.ntp.org",          # NTP Pool
-    "time.google.com",       # Google
-    "time.cloudflare.com",   # Cloudflare
-    "ntp.ix.ru",             # Russia
-    "ntp.nict.jp",           # Japan
-    "time.kriss.re.kr",      # Korea
-    "time.nplindia.in",      # India
-    "ntp.tpg.com.au",        # Australia
-]
+GLOBAL_NTP_SERVERS = {
+    # Country: (Laboratory, Server, Description)
+    'USA': ('NIST/USNO', 'time.nist.gov', 'National Institute of Standards and Technology'),
+    'UK': ('NPL', 'ntp1.npl.co.uk', 'National Physical Laboratory'),
+    'Germany': ('PTB', 'ptbtime1.ptb.de', 'Physikalisch-Technische Bundesanstalt'),
+    'Russia': ('ВНИИФТРИ', 'ntp2.vniiftri.ru', 'All-Russian Scientific Research Institute'),
+    'China': ('NIM', 'cn.pool.ntp.org', 'National Institute of Metrology'),
+    'Japan': ('NICT', 'ntp.jst.mfeed.ad.jp', 'National Institute of Information and Communications'),
+    'Canada': ('NRC', 'time.nrc.ca', 'National Research Council'),
+    'Australia': ('NMI', 'ntp.ausaid.gov.au', 'National Measurement Institute'),
+    'India': ('NPL', 'in.pool.ntp.org', 'National Physical Laboratory India'),
+    'Sweden': ('Netnod', 'ntp.se', 'Swedish Internet Exchange'),
+    'Switzerland': ('METAS', 'ntp.metas.ch', 'Federal Institute of Metrology'),
+    'South Korea': ('KRISS', 'time.kriss.re.kr', 'Korea Research Institute of Standards'),
+    'Mexico': ('CENAM', 'ntp.cenam.mx', 'Centro Nacional de Metrología'),
+}
 ```
 
 **Level 2: MEMPOOL_TIME**
@@ -172,45 +176,31 @@ def compute_vdf_checkpoint(prev_hash: bytes, iterations: int) -> bytes:
 BTC_RECOVERY_BLOCKS = 20
 ```
 
-### 3.4 AdamSync Class
+### 3.4 AdamLevel Enum
 
 ```python
-class AdamSync:
+class AdamLevel(IntEnum):
     """
-    Time synchronization engine using 7-level hierarchy.
+    ADAM canonical levels (0-6).
 
-    Primary: Bitcoin block timestamps
-    Fallback: SHAKE256 VDF when Bitcoin unavailable
+    Primary: Bitcoin block timestamps (levels 2-4)
+    Fallback: SHAKE256 VDF when Bitcoin unavailable (levels 5-6)
     """
+    NODE_UTC = 0         # Hardware clock (UTC)
+    GLOBAL_NTP = 1       # 13 national metrology laboratories
+    MEMPOOL_TIME = 2     # Bitcoin mempool observation
+    BLOCK_TIME = 3       # Bitcoin block confirmation
+    BITCOIN_ACTIVE = 4   # Normal operation, VDF not needed
+    VDF_FALLBACK = 5     # BTC down 2+ blocks, VDF active
+    VDF_DEACTIVATE = 6   # BTC returned +20 blocks, transition back
 
-    def __init__(self, btc_oracle=None):
-        self.btc_oracle = btc_oracle
-        self.ntp_servers = NTP_SERVERS
-        self.vdf_active = False
-        self.btc_down_blocks = 0
-
-    def get_network_time(self) -> Tuple[int, int]:
-        """
-        Get network time and confidence level.
-
-        Returns: (timestamp, level)
-        """
-        # Try Bitcoin first (level 3-4)
-        if self.btc_oracle:
-            btc_time = self.btc_oracle.get_block_time()
-            if btc_time:
-                self.btc_down_blocks = 0
-                return btc_time, 4  # BITCOIN_ACTIVE
-
-        # Bitcoin unavailable
-        self.btc_down_blocks += 1
-
-        if self.btc_down_blocks >= 2:
-            # Level 5: VDF_FALLBACK
-            return self._get_vdf_time(), 5
-
-        # Level 1: NTP consensus
-        return self._get_ntp_time(), 1
+# Level transitions
+def get_current_level(btc_available: bool, btc_down_blocks: int) -> AdamLevel:
+    if btc_available:
+        return AdamLevel.BITCOIN_ACTIVE
+    if btc_down_blocks >= 2:
+        return AdamLevel.VDF_FALLBACK
+    return AdamLevel.GLOBAL_NTP
 ```
 
 ---
@@ -236,14 +226,13 @@ class BlockHeader:
     vdf_proof: bytes
     vdf_iterations: int
 
-    # VRF proof (leader selection)
+    # VRF proof (eligibility, not leader selection)
     vrf_output: bytes
     vrf_proof: bytes
 
-    # Leader identity
-    leader_pubkey: bytes      # 32 bytes
-    leader_signature: bytes   # 64 bytes
-    is_fallback_leader: bool  # True if no node won VRF lottery
+    # Block producer identity (any eligible node)
+    leader_pubkey: bytes      # 32 bytes (producer's key)
+    leader_signature: bytes   # 64 bytes (producer's signature)
 ```
 
 ### 4.2 Transaction Types
@@ -452,7 +441,9 @@ ASSOCIATE_INTEGRITY_PENALTY = 0.10    # -10% for those vouched by attacker
 
 ---
 
-## 7. The Hal Humanity System
+## 7. HAL: Human Analyse Language
+
+HAL = Human Analyse Language. Named after Hal Finney (1956-2014).
 
 Proof of Human, not just Proof of Time.
 
@@ -569,6 +560,8 @@ MIN_NETWORK_ENTROPY = 0.5
 ## 9. Post-Quantum Cryptography
 
 Complete quantum-resistant cryptographic stack following NIST standards.
+
+**Note:** VDF (SHAKE256) is used as a backup timing mechanism when Bitcoin is unavailable. Under normal operation, Bitcoin provides authoritative time. Post-quantum cryptography ensures the network remains secure even if quantum computers break classical algorithms.
 
 ### 9.1 Algorithm Selection
 
@@ -858,8 +851,8 @@ montana/
 │   │   ├── dag.py                  # DAG structure
 │   │   └── dag_storage.py          # DAG persistence
 │   ├── athena/                     # Consensus
-│   │   ├── consensus.py            # Leader selection, finality
-│   │   └── engine.py               # Unified engine
+│   │   ├── consensus.py            # DAG ordering (no leader selection)
+│   │   └── engine.py               # Unified consensus engine
 │   ├── prometheus/                 # Cryptography
 │   │   └── pq_crypto.py            # VDF, VRF, SPHINCS+
 │   ├── plutus/                     # Wallet
@@ -895,14 +888,14 @@ montana/
 | ADAM | God of Time | 7 temporal levels, Bitcoin anchor, VDF fallback |
 | PAUL | Network | P2P, Noise Protocol, bootstrap |
 | HADES | Storage | SQLite, DAG persistence |
-| ATHENA | Consensus | Leader selection, finality |
+| ATHENA | Consensus | DAG ordering, PHANTOM, finality (no leader) |
 | PROMETHEUS | Crypto | VDF, VRF, SPHINCS+, SHA3 |
 | PLUTUS | Wallet | Keys, transactions, AES-256-GCM |
 | NYX | Privacy | T0/T1, LSAG, stealth addresses |
 | THEMIS | Validation | Block/transaction validation |
 | IRIS | RPC | JSON-RPC 2.0 server |
 | APOSTLES | Trust | 12 Apostles, seniority bonus |
-| HAL | Humanity | Reputation, Sybil detection, slashing |
+| HAL | Human Analyse Language | Reputation, Sybil detection, slashing |
 
 ### 14.3 Running a Node
 
@@ -981,14 +974,23 @@ With quantum-resistant cryptography and the Hal Humanity System, these guarantee
 
 ```python
 # ============================================================
-# ADAM: TIME LEVELS
+# ADAM: TIME LEVELS (Anchored Deterministic Asynchronous Mesh)
 # ============================================================
-NTP_SERVERS = [
-    "time.nist.gov", "time.windows.com", "time.apple.com",
-    "ntp.ubuntu.com", "pool.ntp.org", "time.google.com",
-    "time.cloudflare.com", "ntp.ix.ru", "ntp.nict.jp",
-    "time.kriss.re.kr", "time.nplindia.in", "ntp.tpg.com.au"
-]
+GLOBAL_NTP_SERVERS = {
+    'USA': 'time.nist.gov',           # NIST/USNO
+    'UK': 'ntp1.npl.co.uk',           # NPL
+    'Germany': 'ptbtime1.ptb.de',     # PTB
+    'Russia': 'ntp2.vniiftri.ru',     # ВНИИФТРИ
+    'China': 'cn.pool.ntp.org',       # NIM
+    'Japan': 'ntp.jst.mfeed.ad.jp',   # NICT
+    'Canada': 'time.nrc.ca',          # NRC
+    'Australia': 'ntp.ausaid.gov.au', # NMI
+    'India': 'in.pool.ntp.org',       # NPL India
+    'Sweden': 'ntp.se',               # Netnod
+    'Switzerland': 'ntp.metas.ch',    # METAS
+    'South Korea': 'time.kriss.re.kr',# KRISS
+    'Mexico': 'ntp.cenam.mx',         # CENAM
+}
 VDF_INTERVAL = 600              # 10 minutes
 BTC_RECOVERY_BLOCKS = 20        # Blocks before VDF deactivates
 
@@ -1015,7 +1017,7 @@ MIN_INTEGRITY_FOR_HANDSHAKE = 0.50
 HANDSHAKE_COOLDOWN = 86400      # 24 hours
 
 # ============================================================
-# HAL HUMANITY SYSTEM
+# HAL: HUMAN ANALYSE LANGUAGE
 # ============================================================
 MAX_APOSTLES_HARDWARE = 3       # Tier 1
 MAX_APOSTLES_SOCIAL = 6         # Tier 2

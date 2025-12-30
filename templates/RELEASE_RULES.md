@@ -36,7 +36,7 @@ MAJOR.MINOR.PATCH
 | THEMIS | Production | Validation (blocks, transactions) |
 | IRIS | Production | RPC Server (JSON-RPC 2.0) |
 | APOSTLES | Production | Trust (12 bootstrap nodes) |
-| HAL | Production | Humanity (reputation, Sybil, slashing) |
+| HAL | Production | Human Analyse Language (reputation, Sybil, slashing) |
 
 ### 3. Documentation
 - [ ] Update version in `README.md` (badge, installation, features)
@@ -129,7 +129,7 @@ Montana - это не changelog. Это полная архитектурная 
 ## Trust Network (APOSTLES)
 [12 bootstrap nodes, trust scoring]
 
-## Humanity Verification (HAL)
+## HAL: Human Analyse Language
 [Reputation, Sybil detection, slashing]
 
 ## Appendix
@@ -347,6 +347,6 @@ All 11 modules are now production-ready:
 |---------|------|------------|
 | v4.3.0 | 2024-12-30 | Module consolidation (ADAM, HAL merge) |
 | v4.2.1 | 2024-12-XX | Bitcoin-anchored TIME dimension |
-| v4.2.0 | 2024-12-XX | HAL Humanity System |
+| v4.2.0 | 2024-12-XX | HAL: Human Analyse Language |
 | v4.0.0 | 2024-12-XX | Montana - Bitcoin Time Oracle |
 | v3.1.0 | 2024-12-XX | Security hardening |
