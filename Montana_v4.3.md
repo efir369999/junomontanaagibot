@@ -1,7 +1,5 @@
 # Ɉ Montana: Time-Proven Human Temporal Currency
 
-*A Peer-to-Peer Quantum-Resistant Electronic Cash System*
-
 **Version 4.3**
 **Alejandro Montana**
 alejandromontana@tutamail.com
@@ -11,7 +9,7 @@ alejandromontana@tutamail.com
 
 ## Abstract
 
-A purely peer-to-peer electronic cash system without reliance on financial institutions. Existing cryptocurrency solutions—Proof of Work and Proof of Stake—scale influence through purchasable resources, concentrating power in capital owners.
+A peer-to-peer quantum-resistant electronic cash system without reliance on financial institutions. Existing cryptocurrency solutions—Proof of Work and Proof of Stake—scale influence through purchasable resources, concentrating power in capital owners.
 
 Ɉ Montana ($MONT) builds consensus on Proof of Time. Influence accumulates through time presence, not resource expenditure. The network timestamps blocks through sequential computation that cannot be parallelized or accelerated.
 
