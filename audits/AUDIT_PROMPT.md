@@ -158,6 +158,7 @@ Send this prompt + repository files to any AI API.
 
 | Model | Date | Version | Overall Score | File |
 |-------|------|---------|---------------|------|
+| Claude Opus 4.5 (v4.0) | 2025-12-30 | v4.0.0 | 9.2/10 | [claude_opus_4.5_v4.0_audit.md](anthropic/claude_opus_4.5_v4.0_audit.md) |
 | Claude Opus 4.5 (v2.5) | 2025-12-29 | v2.5.0 | 8.3/10 | [claude_opus_4.5_v2.5_audit.md](anthropic/claude_opus_4.5_v2.5_audit.md) |
 | Claude Opus 4.5 (v2.3) | 2025-12-29 | v2.3.0 | PASS | [SECURITY_AUDIT.md](anthropic/SECURITY_AUDIT.md) |
 | Claude Opus 4.5 (v2.0) | 2025-12-28 | v2.0.0 | 9.0/10 | [claude_opus_4.5_v2.0_audit.md](anthropic/claude_opus_4.5_v2.0_audit.md) |
