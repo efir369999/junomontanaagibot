@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum, auto
 from collections import defaultdict
 
-from pantheon.prometheus import sha256, Ed25519, ECVRF, VRFOutput, WesolowskiVDF, VDFProof
+from pantheon.prometheus import sha256, Ed25519, ECVRF, VRFOutput
 from pantheon.themis import Block, BlockHeader, Transaction, create_genesis_block
 from config import PROTOCOL, NodeConfig, get_block_reward
 
@@ -694,23 +694,27 @@ class LeaderSelector:
         if not ECVRF.verify(leader_pubkey, vrf_input, vrf_output):
             return False, "Invalid VRF proof"
 
-        # Check VRF output vs probability
-        vrf_float = self.vrf_to_float(vrf_output.beta)
+        # Check VRF output vs probability using precise integer comparison
+        # (same as is_leader() for consistency)
+        vrf_int = self._vrf_to_int(vrf_output.beta)
+        threshold = int(probability * (1 << 64))
 
-        # Primary check: VRF output must be less than probability to be a valid winner
-        if vrf_float < probability:
+        # Primary check: VRF output must be less than threshold to be a valid winner
+        if vrf_int < threshold:
             return True, "Valid VRF winner"
 
         # Fallback check: If no one won the lottery, the node with lowest VRF wins
         # This is only valid if the network explicitly entered fallback mode
         if is_fallback_allowed:
             # In fallback mode, any valid VRF is acceptable (lowest wins)
+            vrf_float = vrf_int / (1 << 64)  # For logging only
             logger.debug(
                 f"Leader accepted via fallback: VRF {vrf_float:.6f} > probability {probability:.6f}"
             )
             return True, "Valid fallback selection"
 
         # Leader claims to have won but VRF doesn't support it
+        vrf_float = vrf_int / (1 << 64)  # For logging only
         return False, f"VRF {vrf_float:.6f} >= probability {probability:.6f} - not a valid winner"
 
 
@@ -747,25 +751,29 @@ class SybilDetector:
     # Probation period in seconds (180 days = ~26000 blocks * 720 seconds)
     PROBATION_PERIOD = PROTOCOL.QUARANTINE_BLOCKS * PROTOCOL.BLOCK_INTERVAL
     
-    def __init__(self, window_size: int = PROTOCOL.ADJUSTMENT_WINDOW):
+    def __init__(self, window_size: int = PROTOCOL.ADJUSTMENT_WINDOW, data_dir: Optional[str] = None):
         self.window_size = window_size
-        
+        self.data_dir = data_dir  # Directory for persistence
+
         # Connection tracking: (timestamp, node_pubkey_hash)
         self.connection_history: List[Tuple[int, bytes]] = []
-        
+
         # Historical rate statistics
         self.rate_samples: List[float] = []  # Connections per day samples
         self.median_rate: float = 1.0  # Median connections per day
-        
+
         # Probation mode tracking
         self.probation_active: bool = False
         self.probation_start: int = 0
         self.probation_end: int = 0
-        
+
         # Node probation tracking: pubkey -> probation_end_time
         self.nodes_in_probation: Dict[bytes, int] = {}
-        
+
         self._lock = threading.Lock()
+
+        # Load persisted state
+        self._load_state()
     
     def record_connection(self, timestamp: int, node_pubkey: bytes = b''):
         """
@@ -847,12 +855,15 @@ class SybilDetector:
         self.probation_active = True
         self.probation_start = current_time
         self.probation_end = current_time + self.PROBATION_PERIOD
-        
+
         logger.warning(
             f"SYBIL PROBATION ACTIVATED: Connection rate {current_rate:.1f}/day "
             f"exceeds 2x median {self.median_rate:.1f}/day. "
             f"Probation until {datetime.fromtimestamp(self.probation_end).isoformat()}"
         )
+
+        # Persist state after activation
+        self._save_state()
     
     def is_suspicious_influx(self) -> bool:
         """
@@ -885,17 +896,19 @@ class SybilDetector:
         """Check if network is currently in probation mode."""
         if current_time is None:
             current_time = int(time.time())
-        
+
         with self._lock:
             if not self.probation_active:
                 return False
-            
+
             # Check if probation has expired
             if current_time > self.probation_end:
                 self.probation_active = False
                 logger.info("Sybil probation period ended")
+                # Persist state when probation ends
+                self._save_state()
                 return False
-            
+
             return True
     
     def is_node_in_probation(self, node_pubkey: bytes, current_time: Optional[int] = None) -> bool:
@@ -995,12 +1008,12 @@ class SybilDetector:
         """Get current Sybil detection statistics."""
         with self._lock:
             current_time = int(time.time())
-            
+
             # Recent connection count
             short_window = self.SHORT_WINDOW_BLOCKS * PROTOCOL.BLOCK_INTERVAL
             short_cutoff = current_time - short_window
             recent_count = sum(1 for t, _ in self.connection_history if t > short_cutoff)
-            
+
             return {
                 'total_connections': len(self.connection_history),
                 'recent_connections': recent_count,
@@ -1011,6 +1024,95 @@ class SybilDetector:
                 'health_score': self.get_network_health_score(),
                 'is_suspicious': self.is_suspicious_influx()
             }
+
+    # =========================================================================
+    # PERSISTENCE
+    # =========================================================================
+
+    def _get_state_path(self) -> Optional[str]:
+        """Get path to sybil detector state file."""
+        if self.data_dir:
+            import os
+            return os.path.join(self.data_dir, 'sybil_state.bin')
+        return None
+
+    def _load_state(self):
+        """Load persisted sybil detection state."""
+        path = self._get_state_path()
+        if not path:
+            return
+
+        import os
+        if not os.path.exists(path):
+            return
+
+        try:
+            with open(path, 'rb') as f:
+                data = f.read()
+
+            offset = 0
+
+            # Read probation state
+            self.probation_active = struct.unpack_from('<?', data, offset)[0]
+            offset += 1
+            self.probation_start = struct.unpack_from('<Q', data, offset)[0]
+            offset += 8
+            self.probation_end = struct.unpack_from('<Q', data, offset)[0]
+            offset += 8
+            self.median_rate = struct.unpack_from('<d', data, offset)[0]
+            offset += 8
+
+            # Read nodes in probation
+            count = struct.unpack_from('<I', data, offset)[0]
+            offset += 4
+
+            for _ in range(count):
+                pubkey = data[offset:offset + 32]
+                offset += 32
+                end_time = struct.unpack_from('<Q', data, offset)[0]
+                offset += 8
+                self.nodes_in_probation[pubkey] = end_time
+
+            logger.info(f"Loaded sybil state: probation_active={self.probation_active}, "
+                       f"nodes_in_probation={len(self.nodes_in_probation)}")
+
+        except Exception as e:
+            logger.error(f"Failed to load sybil state: {e}")
+
+    def _save_state(self):
+        """Persist sybil detection state."""
+        path = self._get_state_path()
+        if not path:
+            return
+
+        try:
+            import os
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+
+            data = bytearray()
+
+            # Write probation state
+            data.extend(struct.pack('<?', self.probation_active))
+            data.extend(struct.pack('<Q', self.probation_start))
+            data.extend(struct.pack('<Q', self.probation_end))
+            data.extend(struct.pack('<d', self.median_rate))
+
+            # Write nodes in probation
+            data.extend(struct.pack('<I', len(self.nodes_in_probation)))
+            for pubkey, end_time in self.nodes_in_probation.items():
+                data.extend(pubkey)
+                data.extend(struct.pack('<Q', end_time))
+
+            # Atomic write
+            tmp_path = path + '.tmp'
+            with open(tmp_path, 'wb') as f:
+                f.write(data)
+            os.replace(tmp_path, path)
+
+            logger.debug(f"Saved sybil state: {len(self.nodes_in_probation)} nodes in probation")
+
+        except Exception as e:
+            logger.error(f"Failed to save sybil state: {e}")
 
 
 # ============================================================================
@@ -1169,13 +1271,17 @@ class SlashingManager:
     # Minimum number of confirmations before processing slash
     MIN_CONFIRMATIONS = 6
     
-    def __init__(self, db=None):
+    def __init__(self, db=None, data_dir: Optional[str] = None):
         self.pending_slashes: List[SlashingEvidence] = []
         self.confirmed_slashes: List[SlashingEvidence] = []
         self.slashed_nodes: Set[bytes] = set()
         self.slash_history: Dict[bytes, List[SlashingEvidence]] = {}  # pubkey -> history
         self.db = db  # Optional database for persistence
+        self.data_dir = data_dir  # Directory for file-based persistence
         self._lock = threading.Lock()
+
+        # Load persisted state on initialization
+        self._load_state()
     
     def check_equivocation(
         self,
@@ -1310,21 +1416,24 @@ class SlashingManager:
     def confirm_slash(self, evidence: SlashingEvidence, block_height: int):
         """
         Confirm a slash after sufficient block confirmations.
-        
+
         Evidence is moved from pending to confirmed after MIN_CONFIRMATIONS.
         """
         with self._lock:
             if evidence not in self.pending_slashes:
                 return
-            
+
             self.pending_slashes.remove(evidence)
             self.confirmed_slashes.append(evidence)
             self.slashed_nodes.add(evidence.offender)
-            
+
             logger.info(
                 f"Slash confirmed at height {block_height}: "
                 f"{evidence.offender.hex()[:16]}..."
             )
+
+            # Persist state after confirmation
+            self._save_state()
     
     def apply_slash(
         self,
@@ -1365,7 +1474,10 @@ class SlashingManager:
         # Store in confirmed set
         with self._lock:
             self.slashed_nodes.add(node.pubkey)
-        
+
+            # Persist state after applying slash
+            self._save_state()
+
         logger.warning(
             f"SLASH APPLIED to {node.pubkey.hex()[:16]}...: "
             f"All stats reset, quarantined until {node.quarantine_until} "
@@ -1441,8 +1553,101 @@ class SlashingManager:
         )
         evidence.signature1 = sig1
         evidence.signature2 = sig2
-        
+
         return evidence
+
+    # =========================================================================
+    # PERSISTENCE
+    # =========================================================================
+
+    def _get_state_path(self) -> Optional[str]:
+        """Get path to slashing state file."""
+        if self.data_dir:
+            import os
+            return os.path.join(self.data_dir, 'slashing_state.bin')
+        return None
+
+    def _load_state(self):
+        """Load persisted slashing state from disk."""
+        path = self._get_state_path()
+        if not path:
+            return
+
+        import os
+        if not os.path.exists(path):
+            return
+
+        try:
+            with open(path, 'rb') as f:
+                data = f.read()
+
+            offset = 0
+
+            # Read slashed nodes count
+            count = struct.unpack_from('<I', data, offset)[0]
+            offset += 4
+
+            for _ in range(count):
+                pubkey = data[offset:offset + 32]
+                offset += 32
+                self.slashed_nodes.add(pubkey)
+
+            # Read confirmed slashes count
+            count = struct.unpack_from('<I', data, offset)[0]
+            offset += 4
+
+            for _ in range(count):
+                ev_len = struct.unpack_from('<I', data, offset)[0]
+                offset += 4
+                ev_data = data[offset:offset + ev_len]
+                offset += ev_len
+                evidence = SlashingEvidence.deserialize(ev_data)
+                self.confirmed_slashes.append(evidence)
+
+                # Rebuild history
+                if evidence.offender not in self.slash_history:
+                    self.slash_history[evidence.offender] = []
+                self.slash_history[evidence.offender].append(evidence)
+
+            logger.info(f"Loaded slashing state: {len(self.slashed_nodes)} slashed nodes")
+
+        except Exception as e:
+            logger.error(f"Failed to load slashing state: {e}")
+
+    def _save_state(self):
+        """Persist slashing state to disk."""
+        path = self._get_state_path()
+        if not path:
+            return
+
+        try:
+            import os
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+
+            data = bytearray()
+
+            # Write slashed nodes
+            data.extend(struct.pack('<I', len(self.slashed_nodes)))
+            for pubkey in self.slashed_nodes:
+                data.extend(pubkey)
+
+            # Write confirmed slashes
+            data.extend(struct.pack('<I', len(self.confirmed_slashes)))
+            for evidence in self.confirmed_slashes:
+                ev_data = evidence.serialize()
+                data.extend(struct.pack('<I', len(ev_data)))
+                data.extend(ev_data)
+
+            # Atomic write
+            tmp_path = path + '.tmp'
+            with open(tmp_path, 'wb') as f:
+                f.write(data)
+            os.replace(tmp_path, path)
+
+            logger.debug(f"Saved slashing state: {len(self.slashed_nodes)} slashed nodes")
+
+        except Exception as e:
+            logger.error(f"Failed to save slashing state: {e}")
 
 
 # ============================================================================
@@ -1580,7 +1785,6 @@ class ConsensusEngine:
         self.config = config or NodeConfig()
         
         # Components
-        self.vdf = WesolowskiVDF(PROTOCOL.VDF_MODULUS_BITS)
         self.weights = ProbabilityWeights()
         self.calculator = ConsensusCalculator(self.weights)
         self.leader_selector = LeaderSelector(self.calculator)

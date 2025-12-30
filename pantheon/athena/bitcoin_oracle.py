@@ -596,10 +596,53 @@ class BitcoinBlockMonitor:
         """
         Poll for new Bitcoin blocks.
 
-        Override this method to implement actual Bitcoin connection.
-        Default implementation is a stub for testing.
+        Uses mempool.space API as reliable public endpoint.
+        Override this method for custom Bitcoin connection.
         """
-        pass
+        try:
+            import urllib.request
+            import ssl
+
+            # Create SSL context that works on most systems
+            ctx = ssl.create_default_context()
+
+            # Get latest block height from mempool.space
+            url = "https://mempool.space/api/blocks/tip/height"
+            req = urllib.request.Request(url, headers={'User-Agent': 'Montana/4.2'})
+
+            with urllib.request.urlopen(req, timeout=10, context=ctx) as response:
+                height = int(response.read().decode())
+
+            # Check if we have a new block
+            if height > self.oracle.last_block_height:
+                # Get block hash
+                hash_url = f"https://mempool.space/api/block-height/{height}"
+                req = urllib.request.Request(hash_url, headers={'User-Agent': 'Montana/4.2'})
+
+                with urllib.request.urlopen(req, timeout=10, context=ctx) as response:
+                    block_hash_hex = response.read().decode().strip()
+                    # Convert from big-endian hex to little-endian bytes
+                    block_hash = bytes.fromhex(block_hash_hex)[::-1]
+
+                # Get block details for timestamp
+                block_url = f"https://mempool.space/api/block/{block_hash_hex}"
+                req = urllib.request.Request(block_url, headers={'User-Agent': 'Montana/4.2'})
+
+                with urllib.request.urlopen(req, timeout=10, context=ctx) as response:
+                    block_data = json.loads(response.read().decode())
+                    timestamp = block_data.get('timestamp', int(time.time()))
+                    prev_hash_hex = block_data.get('previousblockhash', '00' * 32)
+                    prev_hash = bytes.fromhex(prev_hash_hex)[::-1]
+
+                # Notify oracle
+                self.oracle.on_new_block(height, block_hash, timestamp, prev_hash)
+                logger.debug(f"Polled new block: height={height}")
+
+        except urllib.error.URLError as e:
+            logger.warning(f"Bitcoin API unavailable: {e}")
+            # Let oracle handle fallback via check_fallback_needed()
+        except Exception as e:
+            logger.error(f"Error polling Bitcoin blocks: {e}")
 
     def simulate_block(self, height: int, block_hash: Optional[bytes] = None):
         """
