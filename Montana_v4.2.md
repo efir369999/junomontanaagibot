@@ -568,7 +568,21 @@ To control majority weighted influence:
 
 Sophisticated attackers can add random delays (150ms+ jitter) to avoid timing correlation detection.
 
-**Mitigation:** Hal Humanity System limits even undetected Sybils to Tier 1 (3 Apostles each).
+**Multi-layer defense:**
+
+1. **GlobalByzantineTracker** — Behavioral fingerprinting:
+   - Join time proximity
+   - Reputation growth rate similarity
+   - Timing entropy (low variance = scripted = suspicious)
+   - Dimension balance patterns
+   - Groups with >80% fingerprint similarity are capped at 33% total influence
+
+2. **Hal Humanity System** — Even undetected Sybils limited to:
+   - Tier 1: 3 Apostles each (Hardware)
+   - Tier 2: 6 Apostles each (Social)
+   - Tier 3: 12 Apostles each (Time-Locked — requires 4 years)
+
+Jitter defeats timing correlation but cannot hide behavioral patterns.
 
 ### 11.2 Cold Start Problem
 
