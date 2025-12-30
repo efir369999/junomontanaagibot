@@ -33,11 +33,8 @@ from pantheon.nyx.tiered_privacy import (
     TIER_SPECS
 )
 from pantheon.nyx import AnonymitySetManager, DEFAULT_RING_SIZE
-from pantheon.nyx.ristretto import (
-    RistrettoPoint, RistrettoScalar, RistrettoGenerators,
-    RistrettoPedersenCommitment, BulletproofPP,
-    generate_ristretto_key_image, L
-)
+# Ristretto removed in v4.3 (experimental)
+# from pantheon.nyx.ristretto import (...)
 from pantheon.prometheus.crypto import Ed25519, sha256
 from config import PROTOCOL, StorageConfig
 
@@ -508,9 +505,10 @@ class TestAnonymitySetManager:
 
 
 # ============================================================================
-# RISTRETTO TESTS
+# RISTRETTO TESTS (SKIPPED - experimental, removed in v4.3)
 # ============================================================================
 
+@pytest.mark.skip(reason="Ristretto removed in v4.3 (experimental)")
 class TestRistrettoScalar:
     """Tests for Ristretto255 scalars."""
     
@@ -554,9 +552,10 @@ class TestRistrettoScalar:
         assert s1 == s2
 
 
+@pytest.mark.skip(reason="Ristretto removed in v4.3 (experimental)")
 class TestRistrettoPoint:
     """Tests for Ristretto255 points."""
-    
+
     def test_generator_not_identity(self):
         """Test generator G is not identity."""
         G = RistrettoGenerators.G()
@@ -581,9 +580,10 @@ class TestRistrettoPoint:
         assert isinstance(P1, RistrettoPoint)
 
 
+@pytest.mark.skip(reason="Ristretto removed in v4.3 (experimental)")
 class TestBulletproofsPP:
     """Tests for Bulletproofs++ range proofs."""
-    
+
     def test_proof_creation(self):
         """Test creating range proof."""
         value = 1000000

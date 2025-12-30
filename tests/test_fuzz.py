@@ -269,6 +269,7 @@ class TestPrivacyFuzz(unittest.TestCase):
         )
         self.assertEqual(survived, FUZZ_ITERATIONS)
     
+    @unittest.skip("RangeProof removed in v4.3 (experimental)")
     def test_fuzz_range_proof_deserialize(self):
         """Fuzz RangeProof deserialization."""
         from pantheon.nyx.privacy import RangeProof

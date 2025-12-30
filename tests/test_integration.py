@@ -763,9 +763,10 @@ class TestBootstrapMechanism(unittest.TestCase):
         self.assertGreater(conf_2, conf_3)
 
 
+@unittest.skip("Bulletproofs removed in v4.3 (experimental)")
 class TestBulletproofVerification(unittest.TestCase):
     """Test Bulletproof range proof verification."""
-    
+
     def test_valid_proof_verification(self):
         """Valid range proofs should verify correctly."""
         from pantheon.nyx.privacy import Bulletproof, Pedersen, Ed25519Point
