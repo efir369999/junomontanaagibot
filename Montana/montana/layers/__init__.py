@@ -1,1 +1,0 @@
-"""Montana Participation Layers module."""

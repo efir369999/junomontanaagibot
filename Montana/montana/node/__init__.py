@@ -1,1 +1,0 @@
-"""Montana Node module."""

@@ -1,1 +1,0 @@
-"""Montana Telegram Bot module."""
