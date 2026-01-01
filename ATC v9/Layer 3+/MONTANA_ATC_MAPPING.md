@@ -1,7 +1,7 @@
 # Montana ↔ ATC Layer Mapping
 
 **Montana Version:** 1.0
-**ATC Version:** 8.1 (L-1 v2.1, L0 v1.0, L1 v1.1, L2 v1.0)
+**ATC Version:** 9.0 (L-1 v2.1, L0 v1.0, L1 v1.1, L2 v1.0)
 
 ---
 
@@ -93,11 +93,16 @@ VDF_STARK_CHECKPOINT_INTERVAL = 1000
 
 ### Montana VRF → L-1.2
 
+**Quantum Status:** ECVRF is BROKEN by Shor's algorithm (ATC L-1.2.3). Montana accepts this for block eligibility because:
+1. Eligibility proofs have short-term validity (current epoch only)
+2. SPHINCS+ signatures provide long-term security for transactions
+3. Upgrade path documented in Montana spec §16.4
+
 ```python
 # Montana uses ECVRF for block eligibility
-# Note: ECVRF is pre-quantum; Montana spec mentions but doesn't detail PQ VRF
+# Quantum-vulnerable but acceptable for short-term proofs
 
-# L-1.2 provides:
+# L-1.2 provides post-quantum alternatives:
 # - Lattice-VRF (L-1.B): Post-quantum, Type B
 # - Hash-VRF (L-1.C): Post-quantum, Type B+C
 
@@ -232,8 +237,8 @@ To verify Montana compliance with ATC:
 
 3. Primitive security (L1):
    ✓ VDF sequentiality preserved
-   ✓ VRF uniqueness (ECVRF)
-   ✓ Commitment binding
+   ⚠ VRF uniqueness (ECVRF) — quantum-vulnerable, upgrade path defined
+   ✓ Commitment binding (hash-based: PQ-safe; Pedersen: hiding only)
 
 4. Consensus properties (L2):
    ✓ Safety: DAG partial order

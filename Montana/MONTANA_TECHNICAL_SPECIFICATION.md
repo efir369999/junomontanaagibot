@@ -488,7 +488,7 @@ class Heartbeat:
     version: int                    # u8 - Protocol version
 
     # Signature
-    signature: Signature            # 17,089 bytes (SPHINCS+)
+    signature: Signature            # 17,088 bytes (SPHINCS+)
 
     def heartbeat_id(self) -> Hash:
         return sha3_256(self.serialize_for_signing())
@@ -986,6 +986,12 @@ def create_stealth_output(
 
 ### 14.3 T2: Pedersen Commitments (Hidden Amount)
 
+**Quantum Note:** Pedersen commitment binding relies on discrete log, which is quantum-vulnerable (ATC L-1.3.4). However:
+- **Hiding** is information-theoretic (Type A) — quantum-resistant
+- Binding only matters for transaction validity, not past privacy
+- Attackers cannot extract hidden values, only potentially forge new commitments
+- **Upgrade path:** Lattice-based commitments when standardized
+
 ```python
 # C = v*H + r*G
 # Where H is second generator (nothing-up-my-sleeve)
@@ -1265,6 +1271,10 @@ def mlkem_decapsulate(ciphertext: bytes, secret_key: bytes) -> bytes:
 ```
 
 ### 16.4 VRF (ECVRF)
+
+**Quantum Status:** ECVRF is based on elliptic curve discrete log (DDH), which is BROKEN by Shor's algorithm. Montana uses ECVRF for block eligibility determination, which has short-term security requirements (current epoch only).
+
+**Upgrade Path:** When cryptographically relevant quantum computers emerge, migrate to Lattice-VRF (ATC L-1.B) or Hash-VRF (ATC L-1.C). Protocol version field enables seamless transition.
 
 ```python
 def ecvrf_prove(secret_key: bytes, input_data: bytes) -> bytes:
