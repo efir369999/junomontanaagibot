@@ -306,7 +306,7 @@ The adversary **may or may not be able to** (Layer 0):
    Layer 2:  Type A/B/C/P/S/I/N
 
 3. CHECK consistency:
-   → Does it violate any L-1.x, L-0.x, or L-1.x constraint?
+   → Does it violate any constraint from Layers -1, 0, 1, or 2?
    → Is the epistemic type correctly stated?
    → Are sources cited?
 
@@ -342,13 +342,14 @@ The adversary **may or may not be able to** (Layer 0):
 
 ### Red Flags (require re-verification):
 
-- Claim contradicts any L-1.x or L-0.x constraint
+- Claim contradicts any Layer -1, 0, 1, or 2 constraint
 - Quantitative claim without units or precision
 - No empirical/mathematical source cited
 - Conflation of physical law with computational assumption
 - Conflation of proven theorem with conjecture
-- Layer 0 claim without acknowledging Layer -1 dependency
+- Higher layer claim without acknowledging lower layer dependency
 - "Always" or "never" without physical/mathematical basis
+- Network assumption without specifying model (sync/async/partial)
 
 ---
 

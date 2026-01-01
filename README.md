@@ -334,11 +334,16 @@ MIT License
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                                                                │
-│   "Protocols may assume weaker physics (additional constraints);│
-│    they cannot assume stronger physics (fewer constraints)     │
+│   "Implementations may assume weaker guarantees at each layer; │
+│    they cannot assume stronger guarantees                      │
 │    without leaving the domain of known science."               │
 │                                                                │
-│                              — Layer -1, Closing Principle     │
+│    Layer -1: Physics      → Cannot exceed physical bounds      │
+│    Layer 0:  Computation  → Cannot break hardness assumptions  │
+│    Layer 1:  Primitives   → Cannot exceed primitive security   │
+│    Layer 2:  Consensus    → Cannot exceed consensus guarantees │
+│                                                                │
+│                              — ATC Closing Principle           │
 │                                                                │
 └────────────────────────────────────────────────────────────────┘
 ```
