@@ -1,13 +1,18 @@
-# Montana ↔ ATC Layer Mapping
+# Ɉ Montana ↔ ATC Layer Mapping
 
-**Montana Version:** 1.1
+**Ɉ Montana Version:** 2.0
+**Ticker:** $MONT
 **ATC Version:** 9.0 (L-1 v2.1, L0 v1.0, L1 v1.1, L2 v1.0)
 
 ---
 
 ## Overview
 
-This document maps Montana temporal consensus protocol components to their foundational ATC layers, showing exactly which constraints and primitives Montana relies upon.
+**Ɉ Montana** is a mechanism for asymptotic trust in the value of time.
+
+**Ɉ** is a Temporal Time Unit (TTU): lim(evidence → ∞) 1 Ɉ → 1 second
+
+This document maps Ɉ Montana components to their foundational ATC layers, showing exactly which constraints and primitives the mechanism relies upon.
 
 ---
 

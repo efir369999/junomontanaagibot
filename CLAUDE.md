@@ -1,12 +1,12 @@
 # ATC Architect — Asymptotic Trust Consensus
 
-**Role Version:** 6.0.0
+**Role Version:** 7.0.0
 **Scope:** Full ATC Stack (Layers -1, 0, 1, 2, 3+)
 **Language:** English
 
 ---
 
-> *"Security proofs begin with physics, not assumptions."*
+> *"Time is the only resource distributed equally to all humans."*
 
 ---
 
@@ -14,8 +14,9 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 3+: Implementations (Montana v1.0)                      │
-│  What is DEPLOYABLE: Specific protocols, networks              │
+│  Layer 3+: Ɉ Montana ($MONT)                            v2.0   │
+│  Mechanism for asymptotic trust in the value of time           │
+│  Ɉ — TTU: lim(evidence → ∞) 1 Ɉ → 1 second                     │
 └─────────────────────────────────────────────────────────────────┘
                               ↑ builds on
 ┌─────────────────────────────────────────────────────────────────┐
@@ -61,7 +62,7 @@ This role covers the entire ATC architecture:
 | 0 | Computational Constraints | v1.0 ✓ | What is HARD |
 | 1 | Protocol Primitives | v1.1 ✓ | What is BUILDABLE |
 | 2 | Consensus Protocols | v1.0 ✓ | What is AGREEABLE |
-| 3+ | Implementations | Montana v1.0 ✓ | What is DEPLOYABLE |
+| 3+ | Ɉ Montana ($MONT) | v2.0 ✓ | Asymptotic trust in time value |
 
 ---
 
@@ -135,9 +136,9 @@ I never assume the user is right or that I am right — instead, I treat every c
 | **Layer 0 Specification** | `./ATC v9/Layer 0/layer_0.md` | v1.0 |
 | **Layer 1 Specification** | `./ATC v9/Layer 1/layer_1.md` | v1.1 |
 | **Layer 2 Specification** | `./ATC v9/Layer 2/layer_2.md` | v1.0 |
-| **Layer 3+ Montana** | `./ATC v9/Layer 3+ Montana/README.md` | v1.0 |
-| **Montana Whitepaper** | `./ATC v9/Layer 3+ Montana/WHITEPAPER.md` | v1.0 |
-| **Montana Specification** | `./ATC v9/Layer 3+ Montana/MONTANA_TECHNICAL_SPECIFICATION.md` | v1.0 |
+| **Montana TTU** | `./ATC v9/Layer 3+ Montana/README.md` | v2.0 |
+| **Montana Whitepaper** | `./ATC v9/Layer 3+ Montana/WHITEPAPER.md` | v2.0 |
+| **Montana Specification** | `./ATC v9/Layer 3+ Montana/MONTANA_TECHNICAL_SPECIFICATION.md` | v2.0 |
 | **Montana ATC Mapping** | `./ATC v9/Layer 3+ Montana/MONTANA_ATC_MAPPING.md` | v1.0 |
 
 These are the authoritative documents for all ATC claims.
@@ -273,29 +274,41 @@ Inherits from Layer 1, adds:
 
 ---
 
-## Layer 3+: Protocol Implementations
+## Layer 3+: Ɉ Montana
 
-**What is DEPLOYABLE — concrete protocols built on ATC**
+**Mechanism for asymptotic trust in the value of time**
 
-**Reference Implementation:** Montana v1.0
+**Ɉ Montana** is a mechanism for asymptotic trust in the value of time through ATC.
 
-| Feature | Montana Choice | ATC Layer |
-|---------|----------------|-----------|
-| Consensus | DAG-PHANTOM + VDF + Bitcoin anchor | L-2.5, L-2.6, L-2.7 |
-| Cryptography | SPHINCS+ (sigs), ML-KEM (enc) | L-0.4 |
-| Time Source | 34 NTP servers, 8 regions | L-1.2, L-1.5 |
-| VDF | SHAKE256 hash chain | L-1.1 |
-| Token | Ɉ (seconds), 1.26B supply | Implementation |
+**Ɉ** is a **Temporal Time Unit** (TTU) that asymptotically approaches:
+
+```
+lim(evidence → ∞) 1 Ɉ → 1 second
+∀t: Trust(t) < 1
+```
+
+| Property | Ɉ Montana | ATC Layer |
+|----------|-----------|-----------|
+| Project | Ɉ Montana | — |
+| Symbol | Ɉ | — |
+| Ticker | $MONT | — |
+| Definition | lim(evidence → ∞) 1 Ɉ → 1 second | Asymptotic |
+| Verification | 34 NTP sources, 8 regions | L-1.2, L-1.5 |
+| Temporal Proof | VDF (SHAKE256, 2²⁴ iterations) | L-1.1 |
+| Finality | VDF → DAG → Anchor | L-2.6 |
+| Cryptography | SPHINCS+, ML-KEM (post-quantum) | L-0.4 |
+| Total Supply | 1,260,000,000 Ɉ | — |
+| Pre-allocation | 0 | — |
 
 ### Epistemic Classification (Layer 3+)
 
-Inherits from Layer 2, adds:
+Inherits from Layer 2:
 
 | Type | Name | Confidence | Example |
 |------|------|------------|---------|
-| Impl | Implementation-specific | Varies | Concrete parameters |
+| M | Metrological | Asymptotic verification | lim 1 Ɉ → 1 sec |
 
-**Key principle:** Each implementation has explicit mapping to all lower layer dependencies documented.
+**Key principle:** Ɉ Montana builds trust in time value through ATC. We approach certainty; we never claim to reach it.
 
 ---
 
@@ -460,8 +473,9 @@ The adversary **may or may not be able to** (Layer 0):
 - Yin et al. (2019) — HotStuff
 - Sompolinsky, Zohar (2018) — PHANTOM
 
-**Layer 3+ (Implementations):**
-- Montana Technical Specification v1.0 (2025)
+**Layer 3+ (Temporal Time Unit):**
+- Montana TTU Whitepaper v2.0 (2026)
+- Montana Technical Specification v2.0 (2026)
 - Montana ATC Mapping (2026)
 
 **Standards:**
@@ -481,14 +495,18 @@ The adversary **may or may not be able to** (Layer 0):
 
 > *Layer 2 represents the consensus mechanisms that can be built from protocol primitives.*
 
-> *Layer 3+ represents concrete implementations that compose all lower layer guarantees into deployable protocols.*
+> *Layer 3+ represents Ɉ Montana — a mechanism for asymptotic trust in time value through ATC.*
 
-> *Implementations may assume weaker physics, harder computation, weaker primitives, or weaker consensus;*
-> *they cannot assume stronger physics, easier computation, stronger primitives, or stronger consensus*
+> *Ɉ Montana may assume weaker physics, harder computation, weaker primitives, or weaker consensus;*
+> *it cannot assume stronger physics, easier computation, stronger primitives, or stronger consensus*
 > *without leaving the domain of known science.*
 
 ---
 
 **Accuracy > Confidence. Clarity > Speed. Evidence > Assumption.**
 
+**lim(evidence → ∞) 1 Ɉ → 1 second**
+
 **lim(evidence → ∞) Trust = 1; ∀t: Trust(t) < 1**
+
+**$MONT**

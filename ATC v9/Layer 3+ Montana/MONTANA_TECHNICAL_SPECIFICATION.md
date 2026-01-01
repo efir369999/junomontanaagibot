@@ -1,13 +1,14 @@
-# Ɉ Montana Technical Specification v1.1
+# Ɉ Montana Technical Specification v2.0
 
 **Protocol Version:** 7
-**Document Version:** 1.1
+**Document Version:** 2.0
 **Date:** January 2026
+**Ticker:** $MONT
 **ATC Compatibility:** v9.0 (L-1 v2.1, L0 v1.0, L1 v1.1, L2 v1.0)
 
-> Montana is a temporal consensus protocol for asymptotic trust in time value.
-> Built on ATC Layer 3+. All security claims inherit from lower ATC layers.
-> See [MONTANA_ATC_MAPPING.md](MONTANA_ATC_MAPPING.md) for complete layer mapping.
+> **Ɉ Montana** is a mechanism for asymptotic trust in the value of time.
+> **Ɉ** — Temporal Time Unit: lim(evidence → ∞) 1 Ɉ → 1 second
+> Built on ATC Layer 3+. See [MONTANA_ATC_MAPPING.md](MONTANA_ATC_MAPPING.md) for layer mapping.
 
 ---
 
@@ -95,34 +96,35 @@ ATC Foundation:
 
 ---
 
-## 2. Time Unit Specification
+## 2. Temporal Time Unit Specification
 
-### 2.1 Identity
+### 2.1 Definition
 
 ```python
-PROTOCOL_NAME: str = "Montana"
-TIME_SYMBOL: str = "Ɉ"
-TICKER: str = "MONT"
-UNIT: str = "seconds"  # 1 Ɉ = 1 second
+# Ɉ Montana — Mechanism for asymptotic trust in time value
+PROJECT: str = "Ɉ Montana"
+SYMBOL: str = "Ɉ"
+TICKER: str = "$MONT"
+DEFINITION: str = "lim(evidence → ∞) 1 Ɉ → 1 second"
+TYPE: str = "Temporal Time Unit"
 ```
 
-### 2.2 Supply Parameters
+### 2.2 Supply
 
 ```python
-TOTAL_SUPPLY: int = 1_260_000_000        # 21 million minutes in seconds
-INITIAL_REWARD: int = 3000               # 50 minutes in seconds
+TOTAL_SUPPLY: int = 1_260_000_000        # 21 million minutes
+INITIAL_DISTRIBUTION: int = 3000         # 50 minutes per block
 HALVING_INTERVAL: int = 210_000          # Blocks per halving
 TOTAL_BLOCKS: int = 6_930_000            # 33 eras × 210,000 blocks
-TOTAL_ERAS: int = 33                     # Number of halvings
+TOTAL_ERAS: int = 33                     # Halving count
 ```
 
-### 2.3 Fair Launch
+### 2.3 Zero Pre-allocation
 
 ```python
-PRE_MINE: int = 0
-FOUNDER_ALLOCATION: int = 0
-ICO_ALLOCATION: int = 0
-TEAM_ALLOCATION: int = 0
+PRE_ALLOCATION: int = 0
+FOUNDER_UNITS: int = 0
+RESERVED_UNITS: int = 0
 ```
 
 ### 2.4 Unit Conversions
@@ -149,36 +151,36 @@ def format_montana(amount: int) -> str:
         return f"{amount} Ɉ"
 ```
 
-### 2.5 Block Reward Function
+### 2.5 Block Distribution Function
 
 ```python
-def get_block_reward(height: int) -> int:
+def get_block_distribution(height: int) -> int:
     """
-    Calculate block reward for given height.
+    Calculate TTU distribution for given block height.
 
     Args:
         height: Block height
 
     Returns:
-        Block reward in seconds (Ɉ)
+        TTU distribution in Ɉ (seconds)
     """
     halvings = height // HALVING_INTERVAL
     if halvings >= TOTAL_ERAS:
         return 0
-    return INITIAL_REWARD >> halvings
+    return INITIAL_DISTRIBUTION >> halvings
 ```
 
-### 2.6 Emission Schedule
+### 2.6 Distribution Schedule
 
-| Era | Height Range | Block Reward | Era Supply | Cumulative |
-|-----|--------------|--------------|------------|------------|
-| 1 | 0 - 209,999 | 3,000 Ɉ | 630,000,000 | 630,000,000 |
-| 2 | 210,000 - 419,999 | 1,500 Ɉ | 315,000,000 | 945,000,000 |
-| 3 | 420,000 - 629,999 | 750 Ɉ | 157,500,000 | 1,102,500,000 |
-| 4 | 630,000 - 839,999 | 375 Ɉ | 78,750,000 | 1,181,250,000 |
-| 5 | 840,000 - 1,049,999 | 187 Ɉ | 39,270,000 | 1,220,520,000 |
+| Era | Height Range | Per Block | Era Total | Cumulative |
+|-----|--------------|-----------|-----------|------------|
+| 1 | 0 - 209,999 | 3,000 Ɉ (50 min) | 630,000,000 Ɉ | 630,000,000 Ɉ |
+| 2 | 210,000 - 419,999 | 1,500 Ɉ (25 min) | 315,000,000 Ɉ | 945,000,000 Ɉ |
+| 3 | 420,000 - 629,999 | 750 Ɉ (12.5 min) | 157,500,000 Ɉ | 1,102,500,000 Ɉ |
+| 4 | 630,000 - 839,999 | 375 Ɉ (6.25 min) | 78,750,000 Ɉ | 1,181,250,000 Ɉ |
+| 5 | 840,000 - 1,049,999 | 187 Ɉ (~3 min) | 39,270,000 Ɉ | 1,220,520,000 Ɉ |
 | ... | ... | ... | ... | ... |
-| 33 | 6,720,000 - 6,929,999 | 0 Ɉ | 0 | 1,260,000,000 |
+| 33 | 6,720,000 - 6,929,999 | 1 Ɉ (1 sec) | Final | 1,260,000,000 Ɉ |
 
 ---
 
@@ -1418,13 +1420,15 @@ def signal_mip_support(heartbeat: Heartbeat, mip_number: int) -> None:
 
 ```python
 # ==============================================================================
-# TIME UNIT
+# Ɉ MONTANA — MECHANISM FOR ASYMPTOTIC TRUST IN TIME VALUE
 # ==============================================================================
-PROTOCOL_NAME = "Montana"
-TIME_SYMBOL = "Ɉ"
-TICKER = "MONT"
+PROJECT = "Ɉ Montana"
+SYMBOL = "Ɉ"
+TICKER = "$MONT"
+DEFINITION = "lim(evidence → ∞) 1 Ɉ → 1 second"
+TYPE = "Temporal Time Unit"
 TOTAL_SUPPLY = 1_260_000_000
-INITIAL_REWARD = 3000
+INITIAL_DISTRIBUTION = 3000
 HALVING_INTERVAL = 210_000
 TOTAL_BLOCKS = 6_930_000
 TOTAL_ERAS = 33
@@ -2339,13 +2343,15 @@ def create_genesis_state() -> GlobalState:
 
 ```python
 # ==============================================================================
-# TIME UNIT
+# Ɉ MONTANA — MECHANISM FOR ASYMPTOTIC TRUST IN TIME VALUE
 # ==============================================================================
-PROTOCOL_NAME = "Montana"
-TIME_SYMBOL = "Ɉ"
-TICKER = "MONT"
+PROJECT = "Ɉ Montana"
+SYMBOL = "Ɉ"
+TICKER = "$MONT"
+DEFINITION = "lim(evidence → ∞) 1 Ɉ → 1 second"
+TYPE = "Temporal Time Unit"
 TOTAL_SUPPLY = 1_260_000_000
-INITIAL_REWARD = 3000
+INITIAL_DISTRIBUTION = 3000
 HALVING_INTERVAL = 210_000
 TOTAL_BLOCKS = 6_930_000
 TOTAL_ERAS = 33
@@ -2482,5 +2488,16 @@ GENESIS_BTC_HASH = bytes(32)         # Set at launch
 
 ---
 
-*Ɉ Montana Technical Specification v1.1*
-*January 2026*
+<div align="center">
+
+**Ɉ Montana**
+
+Mechanism for asymptotic trust in the value of time
+
+*lim(evidence → ∞) 1 Ɉ → 1 second*
+
+**$MONT**
+
+Technical Specification v2.0 | January 2026
+
+</div>
