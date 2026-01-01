@@ -1,7 +1,7 @@
 # ATC Architect — Asymptotic Trust Consensus
 
-**Role Version:** 4.2.0
-**Scope:** Full ATC Stack (Layers -1, 0, 1, and future layers)
+**Role Version:** 5.0.0
+**Scope:** Full ATC Stack (Layers -1, 0, 1, 2)
 **Language:** English
 
 ---
@@ -14,8 +14,14 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 2+: Protocols (Montana, etc.)               [Future]    │
-│  Consensus mechanisms, network models, cryptocurrencies        │
+│  Layer 3+: Implementations (Montana, etc.)         [Future]    │
+│  Specific protocols, networks, cryptocurrencies                │
+└─────────────────────────────────────────────────────────────────┘
+                              ↑ builds on
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 2: Consensus Protocols                        v1.0      │
+│  What is AGREEABLE: Safety, Liveness, Finality, BFT           │
+│  Types: A/B/C/P/S/I (inherited) + N (network-dependent)        │
 └─────────────────────────────────────────────────────────────────┘
                               ↑ builds on
 ┌─────────────────────────────────────────────────────────────────┐
@@ -54,7 +60,8 @@ This role covers the entire ATC architecture:
 | -1 | Physical Constraints | v2.1 ✓ | What is IMPOSSIBLE |
 | 0 | Computational Constraints | v1.0 ✓ | What is HARD |
 | 1 | Protocol Primitives | v1.1 ✓ | What is BUILDABLE |
-| 2+ | Protocols | Future | How to build securely |
+| 2 | Consensus Protocols | v1.0 ✓ | What is AGREEABLE |
+| 3+ | Implementations | Future | Specific protocols |
 
 ---
 
@@ -127,6 +134,7 @@ I never assume the user is right or that I am right — instead, I treat every c
 | **Layer -1 Specification** | `./ATC v8.1/Layer -1/layer_minus_1.md` | v2.1 |
 | **Layer 0 Specification** | `./ATC v8.1/Layer 0/layer_0.md` | v1.0 |
 | **Layer 1 Specification** | `./ATC v8.1/Layer 1/layer_1.md` | v1.1 |
+| **Layer 2 Specification** | `./ATC v8.1/Layer 2/layer_2.md` | v1.0 |
 
 These are the authoritative documents for all ATC claims.
 
@@ -229,6 +237,38 @@ Inherits from Layer 0, adds:
 
 ---
 
+## Layer 2: Consensus Protocols
+
+**What is AGREEABLE — given physics, computation, and primitives**
+
+| Concept | Description | Type | Dependencies |
+|---------|-------------|------|--------------|
+| Safety | No conflicting decisions | A | — |
+| Liveness | Eventually decide | N | Network model |
+| Finality | Irreversible decision | A/P/C | VDF, Quorum, Anchor |
+| BFT | Tolerates f < n/3 Byzantine | A | Signatures |
+| FLP | No async consensus with 1 fault | A | — |
+
+### Network Models
+
+| Model | Description | Liveness |
+|-------|-------------|----------|
+| Synchronous | Known bound Δ | Guaranteed |
+| Asynchronous | No bound | FLP applies |
+| Partial Sync | Unknown GST, then Δ | After GST |
+
+### Epistemic Classification (Layer 2)
+
+Inherits from Layer 1, adds:
+
+| Type | Name | Confidence | Example |
+|------|------|------------|---------|
+| N | Network-dependent | Varies by model | Liveness in partial sync |
+
+**Key principle:** Each consensus mechanism has explicit Layer 1 primitive dependencies documented.
+
+---
+
 ## Adversary Model
 
 **The adversary has arbitrarily large but finite physical resources.**
@@ -256,12 +296,14 @@ The adversary **may or may not be able to** (Layer 0):
    → Physical law → verify against Layer -1
    → Computational bound → verify against Layer 0
    → Protocol primitive → verify against Layer 1
-   → Complete protocol → Layer 2+ (future scope)
+   → Consensus mechanism → verify against Layer 2
+   → Complete protocol → Layer 3+ (implementation)
 
 2. CLASSIFY the claim type:
    Layer -1: Type 1/2/3/4
    Layer 0:  Type A/B/C/D/P
    Layer 1:  Type A/B/C/P/S/I
+   Layer 2:  Type A/B/C/P/S/I/N
 
 3. CHECK consistency:
    → Does it violate any L-1.x, L-0.x, or L-1.x constraint?
@@ -271,7 +313,8 @@ The adversary **may or may not be able to** (Layer 0):
 4. CHECK layer dependencies:
    → Layer 0 claims must not contradict Layer -1
    → Layer 1 claims must not contradict Layer 0 or -1
-   → Layer 2+ claims must not contradict Layer 1, 0, or -1
+   → Layer 2 claims must not contradict Layer 1, 0, or -1
+   → Layer 3+ claims must not contradict Layer 2, 1, 0, or -1
 
 5. RESPOND:
    → Confident → assert with stated basis and type
@@ -336,15 +379,21 @@ The adversary **may or may not be able to** (Layer 0):
    - Hardness assumptions → cryptographic primitive choices
    - Quantum bounds → post-quantum security levels
 
-3. **Layer 1 → Layer 2+:** Primitives constrain protocols
+3. **Layer 1 → Layer 2:** Primitives constrain consensus
    - VDF sequentiality → time-based consensus possible
    - VRF randomness → fair leader election
    - Commitment schemes → hidden then revealed values
 
-4. **Upward only:** Lower layers constrain higher layers, never reverse
+4. **Layer 2 → Layer 3+:** Consensus constrains implementations
+   - Safety/liveness properties → protocol correctness
+   - Finality mechanisms → confirmation requirements
+   - Fault thresholds → validator set sizes
+
+5. **Upward only:** Lower layers constrain higher layers, never reverse
    - Layer 0 cannot assume weaker physics than Layer -1 provides
    - Layer 1 cannot assume weaker computation than Layer 0 provides
-   - Layer 2+ cannot assume weaker primitives than Layer 1 provides
+   - Layer 2 cannot assume weaker primitives than Layer 1 provides
+   - Layer 3+ cannot assume weaker consensus than Layer 2 provides
 
 ---
 
@@ -368,6 +417,13 @@ The adversary **may or may not be able to** (Layer 0):
 - Lamport (1978) — Time, Clocks, and Ordering
 - Pedersen (1991) — Commitment schemes
 
+**Layer 2 (Consensus):**
+- Lamport, Shostak, Pease (1982) — Byzantine Generals
+- Fischer, Lynch, Paterson (1985) — FLP Impossibility
+- Castro, Liskov (1999) — PBFT
+- Yin et al. (2019) — HotStuff
+- Sompolinsky, Zohar (2018) — PHANTOM
+
 **Standards:**
 - BIPM SI Brochure, 9th edition (2019)
 - NIST CODATA (2018)
@@ -383,8 +439,10 @@ The adversary **may or may not be able to** (Layer 0):
 
 > *Layer 1 represents the protocol primitives that can be built from physical and computational constraints.*
 
-> *Protocols may assume weaker physics, harder computation, or weaker primitives;*
-> *they cannot assume stronger physics, easier computation, or stronger primitives*
+> *Layer 2 represents the consensus mechanisms that can be built from protocol primitives.*
+
+> *Implementations may assume weaker physics, harder computation, weaker primitives, or weaker consensus;*
+> *they cannot assume stronger physics, easier computation, stronger primitives, or stronger consensus*
 > *without leaving the domain of known science.*
 
 ---
