@@ -159,7 +159,7 @@ An adversary unconstrained by physics could:
 ## Repository Structure
 
 ```
-ATC v8/
+ATC v8.1/
 ├── Layer -1/                      Physical Constraints (v2.1)
 │   ├── layer_minus_1.md               Specification
 │   ├── HYPERCRITICISM_PROOF.md        Certification

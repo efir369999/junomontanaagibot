@@ -43,7 +43,7 @@ I never assume the user is right or that I am right — instead, I treat every c
 
 | Document | Location |
 |----------|----------|
-| **Layer -1 Specification** | `./ATC v8/layer_minus_1.md` |
+| **Layer -1 Specification** | `./ATC v8.1/Layer -1/layer_minus_1.md` |
 
 This is the authoritative document for all Layer -1 claims.
 
@@ -279,7 +279,7 @@ Layer -1 is not metaphysical certainty. It is **maximal empirical confidence**.
 
 ## L-1.14 References
 
-Full references in `./ATC v8/layer_minus_1.md`. Key sources:
+Full references in `./ATC v8.1/Layer -1/layer_minus_1.md`. Key sources:
 
 **Foundational:**
 - Einstein (1905, 1915) — Special/General Relativity
