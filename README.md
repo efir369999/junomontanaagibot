@@ -1,143 +1,240 @@
-# Layer -1: Physical Constraints
+# ATC: Asymptotic Trust Consensus
 
-**Version 2.1 — Hypercriticism-Resistant Edition**
+### Physics-First Protocol Architecture
 
-*The boundary conditions imposed by physical law on any information-processing system.*
+> **Trust that approaches certainty — grounded in physical law, not faith in algorithms.**
 
-[![Release](https://img.shields.io/badge/release-v2.1.0-blue)](https://github.com/afgrouptime/atc/releases/tag/v2.1.0)
-[![Data](https://img.shields.io/badge/data-July%202025-green)](ATC%20v8/layer_minus_1.md)
-[![Rating](https://img.shields.io/badge/rating-10%2F10-brightgreen)](ATC%20v8/HYPERCRITICISM_PROOF.md)
+```
+                                    ╭─────────────────────────── 1.0 (certainty)
+         Trust                     ╱
+           ↑                    ╱
+       1.0 ┤              ══════
+           │          ════╯
+           │       ═══╯        ← You are here: 10⁻¹⁷ — 10⁻¹⁹ precision
+           │    ═══╯
+           │  ══╯
+           │══╯
+       0.0 ┼────────────────────────────────────────→ Evidence
 
----
+           lim(evidence → ∞) Trust = 1
+           ∀t: Trust(t) < 1
 
-## Overview
+           "We approach, we never claim to arrive."
+```
 
-Layer -1 enumerates the physical constraints that bound all possible protocols.
-
-This layer contains:
-- **No protocol logic**
-- **No cryptographic assumptions**
-- **No design decisions**
-
-It represents the epistemological foundation upon which any secure system must be built.
-
-**Version 2.1 adds:** L-1.0.2 Epistemic Calibration — explicit evaluation criteria that make the document resistant to hypercriticism while maintaining rigorous standards for actual errors.
-
----
-
-## Foundational Axiom
-
-**Any adversary operates within known physics.**
-
-This is the minimal assumption required for "security" to be meaningful. An adversary unconstrained by physics could violate mathematical axioms themselves.
+[![Layer -1](https://img.shields.io/badge/Layer%20--1-v2.1-blue)](ATC%20v8/Layer%20-1/layer_minus_1.md)
+[![Layer 0](https://img.shields.io/badge/Layer%200-v1.0-blue)](ATC%20v8/Layer%200/layer_0.md)
+[![Rating](https://img.shields.io/badge/rating-10%2F10-brightgreen)](ATC%20v8/Layer%20-1/HYPERCRITICISM_PROOF.md)
+[![Physics](https://img.shields.io/badge/foundation-physics-orange)](ATC%20v8/Layer%20-1/layer_minus_1.md)
 
 ---
 
-## Physical Constraints
+## The One-Liner
 
-| ID | Constraint | Precision | Status |
-|----|------------|-----------|--------|
-| L-1.1 | Thermodynamic Arrow | — | 150+ years, no macroscopic violation |
-| L-1.2 | Atomic Time Reproducibility | **5.5×10⁻¹⁹** | Marshall et al. 2025 (NIST Al⁺) |
-| L-1.3 | Landauer Limit | kT ln(2) | Experimentally approached |
-| L-1.4 | Speed of Light | 10⁻¹⁷ | GPS continuous verification |
-| L-1.5 | Terrestrial Time Uniformity | 10⁻¹¹ | GPS + mm-scale optical clocks |
-| L-1.6 | Bekenstein Bound | — | Indirect only (Type 4) |
-| L-1.7 | Thermal Noise Floor | kT/Hz | Confirmed since 1928 |
-| L-1.8 | Quantum Decoherence | — | Type 1 (small), Type 3 (macro) |
-
-**Data current through:** July 2025
+**ATC is a protocol architecture where security proofs begin with physics, not assumptions.**
 
 ---
 
-## Adversary Model
+## Why Physics First?
 
-The adversary has **arbitrarily large but finite** physical resources.
+```
+Traditional Cryptography:          ATC Architecture:
 
-The adversary **CANNOT**:
+"Secure if P ≠ NP"                 Layer -1: Physics      ← IMPOSSIBLE
+       ↓                                  ↓
+  (unproven)                       Layer 0:  Computation  ← HARD
+       ↓                                  ↓
+"Trust us"                         Layer 1+: Protocol     ← SECURE
+```
 
-| Action | Violates |
-|--------|----------|
-| Reverse macroscopic entropy | L-1.1 |
-| Fake atomic clock readings | L-1.2 |
-| Compute without energy dissipation | L-1.3 |
-| Signal faster than light | L-1.4 |
-| Create time rate differential > 10⁻¹¹ on Earth | L-1.5 |
-| Store infinite information | L-1.6 |
-| Measure with infinite precision | L-1.7 |
-| Maintain macroscopic superposition | L-1.8 |
+**The difference:**
+- Traditional: Security hangs on unproven mathematical conjectures
+- ATC: Security is rooted in experimentally verified physical law
+
+**If P = NP tomorrow:**
+- Traditional crypto: Everything breaks
+- ATC: Physical bounds still hold — Landauer, Bekenstein, light speed
 
 ---
 
-## Epistemological Status
+## The Layer Stack
 
-We do not claim metaphysical certainty.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 1+: Protocol Design                          [Future]   │
+│  ─────────────────────────────────────────────────────────────  │
+│  Consensus mechanisms, network models, security definitions    │
+└─────────────────────────────────────────────────────────────────┘
+                              ↑ builds on
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 0: Computational Constraints                   v1.0     │
+│  ─────────────────────────────────────────────────────────────  │
+│  What is HARD: OWF, Lattice, CRHF, VDF, NIST PQC              │
+│  Types: A (proven) → B (reduction) → C (empirical) → D (conjecture)
+└─────────────────────────────────────────────────────────────────┘
+                              ↑ builds on
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer -1: Physical Constraints                       v2.1     │
+│  ─────────────────────────────────────────────────────────────  │
+│  What is IMPOSSIBLE: Thermodynamics, Light speed, Landauer    │
+│  Precision: 10⁻¹⁷ — 10⁻¹⁹ | Tested: 150+ years               │
+└─────────────────────────────────────────────────────────────────┘
+                              ↑ builds on
+┌─────────────────────────────────────────────────────────────────┐
+│  ██████████████████  PHYSICAL REALITY  ██████████████████████  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-We claim **maximal empirical confidence**: these constraints have been tested more rigorously than any cryptographic assumption, across scales from 10⁻¹⁸ m to 10²⁶ m.
+---
 
-Violation at protocol-relevant scales would require revision of physics with no observed failure at any tested scale.
+## Core Insight
+
+> **Any adversary operates within known physics.**
+
+This is the minimal assumption required for "security" to be meaningful.
+
+An adversary unconstrained by physics could:
+- Reverse entropy (undo any computation)
+- Signal faster than light (violate causality)
+- Store infinite information (break all bounds)
+- Violate mathematical axioms themselves
+
+**We don't assume P ≠ NP. We assume physics.**
+
+---
+
+## Layer -1: Physical Constraints
+
+*What is IMPOSSIBLE — tested to 10⁻¹⁷ precision*
+
+| ID | Constraint | Evidence |
+|----|------------|----------|
+| L-1.1 | Thermodynamic Arrow | 150+ years, no macroscopic violation |
+| L-1.2 | Atomic Time | 5.5×10⁻¹⁹ (Marshall et al. 2025) |
+| L-1.3 | Landauer Limit | Experimentally approached |
+| L-1.4 | Speed of Light | 10⁻¹⁷ isotropy (GPS continuous) |
+| L-1.5 | Time Uniformity | mm-scale optical clocks |
+| L-1.6 | Bekenstein Bound | Indirect (GR + QM) |
+| L-1.7 | Thermal Noise | Confirmed since 1928 |
+| L-1.8 | Decoherence | Many scales confirmed |
+
+**→ [Full specification](ATC%20v8/Layer%20-1/layer_minus_1.md)**
+
+---
+
+## Layer 0: Computational Constraints
+
+*What is HARD — given that physics holds*
+
+| Tier | Content | Stability |
+|------|---------|-----------|
+| 1 | Information-theoretic (Shannon, Birthday) | Eternal |
+| 2 | Physical bounds (Landauer → computation) | 100+ years |
+| 3 | Hardness classes (OWF, Lattice, CRHF) | 50+ years |
+| 4 | Primitives (SHA-3, ML-KEM, ML-DSA) | 10-30 years |
+
+**Post-Quantum Ready:** NIST FIPS 203/204/205 from day one.
+
+**→ [Full specification](ATC%20v8/Layer%200/layer_0.md)**
+
+---
+
+## Asymptotic — Not Absolute
+
+| What we claim | What we don't claim |
+|---------------|---------------------|
+| Maximal empirical confidence | Metaphysical certainty |
+| 150+ years of verification | Eternal truth |
+| 10⁻¹⁷ precision | Infinite precision |
+| Best current physics | Final physics |
+
+**This is the asymptote:**
+- We approach certainty
+- We never claim to reach it
+- Each year of non-violation brings us closer
+- We remain epistemically honest
 
 ---
 
 ## Repository Structure
 
 ```
-ATC v8/                      Current focus: Layer -1 v2.1
-├── layer_minus_1.md             Physical constraints specification
-├── HYPERCRITICISM_PROOF.md      Certification methodology
-├── EVALUATION_QUICK_REFERENCE.md    Rapid assessment card
+ATC v8/
+├── Layer -1/                      Physical Constraints (v2.1)
+│   ├── layer_minus_1.md               Specification
+│   ├── HYPERCRITICISM_PROOF.md        Certification
+│   ├── EVALUATION_QUICK_REFERENCE.md  Assessment card
+│   └── RELEASE_v2.1.md                Release notes
+│
+└── Layer 0/                       Computational Constraints (v1.0)
+    ├── layer_0.md                     Specification
+    ├── HYPERCRITICISM_PROOF.md        Certification
+    ├── EVALUATION_QUICK_REFERENCE.md  Assessment card
+    └── RELEASE_v1.0.md                Release notes
 
-CLAUDE.md                    AI architect role (Layer -1 focused)
-
-ATC v7/                      Archive: Protocol implementation
-PoT v1-6/                    Archive: Legacy versions
-Montana/                     Token specification
+CLAUDE.md                          AI Architect role definition
 ```
 
 ---
 
-## Documentation
+## Quick Links
 
-| Document | Description |
-|----------|-------------|
-| [Layer -1 Specification](ATC%20v8/layer_minus_1.md) | Full physical constraints (v2.1) |
-| [Hypercriticism Proof](ATC%20v8/HYPERCRITICISM_PROOF.md) | Why v2.1 is rated 10/10 |
-| [Evaluation Quick Reference](ATC%20v8/EVALUATION_QUICK_REFERENCE.md) | 30-second assessment card |
-| [CLAUDE.md](CLAUDE.md) | AI architect role definition |
-
----
-
-## Explicit Exclusions
-
-Layer -1 excludes by design:
-
-- Computational hardness assumptions (P ≠ NP, factoring)
-- Specific cryptographic primitives
-- Network topology and latency distributions
-- Security definitions
-- Quantum computing capabilities
-
-These belong to higher layers (0, 1, 2, ...) which may be developed in the future.
+| Document | Layer | Description |
+|----------|-------|-------------|
+| [Layer -1 Spec](ATC%20v8/Layer%20-1/layer_minus_1.md) | -1 | Physical constraints |
+| [Layer 0 Spec](ATC%20v8/Layer%200/layer_0.md) | 0 | Computational constraints |
+| [L-1 Certification](ATC%20v8/Layer%20-1/HYPERCRITICISM_PROOF.md) | -1 | Why 10/10 |
+| [L0 Certification](ATC%20v8/Layer%200/HYPERCRITICISM_PROOF.md) | 0 | Why 10/10 |
 
 ---
 
-## References
+## The Name Explained
 
-Key sources (full list in `layer_minus_1.md`):
+```
+A S Y M P T O T I C
+        ↓
+    Approaching but never reaching
+    Honest about limits
+    Scientific humility
 
-**Foundational:**
-- Einstein (1905, 1915) — Special/General Relativity
-- Landauer (1961) — Irreversibility and Heat Generation
-- Bekenstein (1981) — Entropy-to-Energy Bound
+T R U S T
+    ↓
+    Not blind faith
+    Earned through evidence
+    Grounded in physics
 
-**Recent (2024-2025):**
-- Marshall et al. (2025) — Al⁺ clock at 5.5×10⁻¹⁹
-- Aeppli et al. (2024) — Sr clock at 8×10⁻¹⁹
-- Hausser et al. (2025) — In⁺/Yb⁺ crystal clock
-- Hayden & Wang (2025) — Bekenstein bound limits
+C O N S E N S U S
+        ↓
+    Scientific community (NIST, BIPM, PTB)
+    Cryptographic community (IACR, NIST PQC)
+    Network participants
+```
 
-**Standards:**
-- BIPM SI Brochure, 9th edition (2019)
+**ATC = The protocol that earns trust asymptotically, through physics.**
+
+---
+
+## Releases
+
+| Layer | Version | Tag | Status |
+|-------|---------|-----|--------|
+| -1 | v2.1.0 | [layer-1-v2.1.0](https://github.com/afgrouptime/atc/releases/tag/layer-1-v2.1.0) | 10/10 |
+| 0 | v1.0.0 | [layer-0-v1.0.0](https://github.com/afgrouptime/atc/releases/tag/layer-0-v1.0.0) | 10/10 |
+
+---
+
+## Foundational References
+
+**Physics (Layer -1):**
+- Einstein (1905, 1915) — Relativity
+- Landauer (1961) — Computation thermodynamics
+- Bekenstein (1981) — Information bounds
+- Marshall et al. (2025) — Atomic clocks at 10⁻¹⁹
+
+**Computation (Layer 0):**
+- Shannon (1948) — Information theory
+- NIST FIPS 203/204/205 (2024) — Post-quantum standards
+- Regev (2005) — Lattice cryptography
 
 ---
 
@@ -149,17 +246,32 @@ MIT License
 
 ## Closing Principle
 
-> *Layer -1 represents the boundary conditions imposed by physical law on any information-processing system.*
-> *Protocols may assume weaker physics (additional constraints);*
-> *they cannot assume stronger physics (fewer constraints)*
-> *without leaving the domain of known science.*
+```
+┌────────────────────────────────────────────────────────────────┐
+│                                                                │
+│   "Protocols may assume weaker physics (additional constraints);│
+│    they cannot assume stronger physics (fewer constraints)     │
+│    without leaving the domain of known science."               │
+│                                                                │
+│                              — Layer -1, Closing Principle     │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
+<div align="center">
+
 *Dedicated to the memory of*
 
-**Hal Finney** (1956-2014)
+**Hal Finney** (1956–2014)
 
 *First recipient of a Bitcoin transaction. Creator of RPOW.*
 
 *"Running bitcoin" — January 11, 2009*
+
+---
+
+**ATC: Where security begins with physics.**
+
+</div>
