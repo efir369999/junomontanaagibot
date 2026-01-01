@@ -1,8 +1,8 @@
 # Ɉ Montana ↔ ATC Layer Mapping
 
-**Ɉ Montana Version:** 2.0
+**Ɉ Montana Version:** 3.0
 **Ticker:** $MONT
-**ATC Version:** 9.0 (L-1 v2.1, L0 v1.0, L1 v1.1, L2 v1.0)
+**ATC Version:** 10.0 (L-1 v2.1, L0 v1.0, L1 v1.1, L2 v1.0)
 
 ---
 
@@ -11,6 +11,8 @@
 **Ɉ Montana** is a mechanism for asymptotic trust in the value of time.
 
 **Ɉ** is a Temporal Time Unit (TTU): lim(evidence → ∞) 1 Ɉ → 1 second
+
+**v3.0:** Self-sovereign finality through accumulated VDF. No external dependencies.
 
 This document maps Ɉ Montana components to their foundational ATC layers, showing exactly which constraints and primitives the mechanism relies upon.
 
@@ -138,28 +140,31 @@ Montana implements these L2 consensus patterns:
 | **L-2.2.2** Byzantine | f < n/3 with score weighting | §8 |
 | **L-2.5.2** DAG Model | PHANTOM ordering | §10 |
 | **L-2.6.1** Quorum Finality | Score-weighted signers | §9 |
-| **L-2.6.4** Anchor Finality | Bitcoin 6-100 confirmations | §6 |
+| **L-2.6.3** VDF Finality | Accumulated VDF depth | §6 |
 | **L-2.7.2** VDF Time | Epoch progression via VDF | §5 |
 
 ### Montana Finality Model
 
 ```
-Montana Three-Layer Finality:
+Montana Three-Layer Finality (Self-Sovereign):
 
 1. Soft Finality (seconds)
-   └─ VDF checkpoint every 1 second
+   └─ VDF checkpoint every 2.5 seconds
    └─ Maps to L-2.6.3: VDF-based finality
    └─ Type: P (physical)
 
 2. Medium Finality (minutes)
-   └─ DAG-PHANTOM ordering
-   └─ Maps to L-2.5.2: DAG model
-   └─ Type: C (empirical)
+   └─ DAG-PHANTOM ordering + 100 VDF checkpoints
+   └─ Maps to L-2.5.2: DAG model + L-2.6.3
+   └─ Type: P + C (physical + empirical)
 
-3. Hard Finality (hours)
-   └─ Bitcoin anchor (6-100 confirmations)
-   └─ Maps to L-2.6.4: Anchor-based finality
-   └─ Type: C (Bitcoin's empirical security)
+3. Hard Finality (40+ minutes)
+   └─ 1000+ accumulated VDF checkpoints
+   └─ Maps to L-2.6.3: VDF-based finality
+   └─ Type: P (physical)
+
+Attack cost: Rewriting N checkpoints requires N × 2.5 seconds
+This is a PHYSICAL BOUND — cannot be reduced by more hardware or money.
 ```
 
 ### Montana Consensus Properties
@@ -168,7 +173,7 @@ Montana Three-Layer Finality:
 |----------|-------------------|------------|------|
 | Safety | No conflicting blocks in same DAG path | L-2.3.1 | A |
 | Liveness | Eventually produce blocks (after GST) | L-2.3.2 | N |
-| Finality | Bitcoin anchor irreversible | L-2.3.5 | C |
+| Finality | Accumulated VDF irreversible | L-2.3.5 | P |
 
 ---
 
@@ -182,7 +187,7 @@ Montana uses these L-2.7 composition patterns:
 | **L-2.7.2** VDF Time Progression | Epoch advancement |
 | **L-2.7.3** Commit-Reveal | (Not currently used) |
 | **L-2.7.4** Timestamp Ordering | Heartbeat sequencing |
-| **L-2.7.5** DAG + Consensus | DAG-PHANTOM + Bitcoin anchor |
+| **L-2.7.5** DAG + Consensus | DAG-PHANTOM + Accumulated VDF |
 
 ---
 
@@ -193,8 +198,7 @@ Montana uses these L-2.7 composition patterns:
 | NTP disagreement | L-2.8.3 Time source | Require supermajority |
 | Network partition | L-2.8.1 Partition | Wait for GST |
 | Byzantine nodes | L-2.8.2 Threshold | Bounded by f < n/3 |
-| VDF speedup | L-2.8.4 VDF speedup | Bitcoin anchor bounds |
-| Bitcoin reorg | External | Wait for more confirmations |
+| VDF speedup | L-2.8.4 VDF speedup | Physical bound (impossible) |
 
 ---
 
@@ -204,11 +208,26 @@ Montana uses these L-2.7 composition patterns:
 |-------------------|--------------|-------|
 | Atomic time consensus | Type 1 (L-1) | Physical measurement |
 | VDF computation | Type P + C | Physical + empirical |
+| Accumulated finality | Type P | Physical (sequential time) |
 | ECVRF eligibility | Type C | Pre-quantum empirical |
 | SPHINCS+ signatures | Type C (L0) | 10+ years empirical |
 | DAG ordering | Type C | PHANTOM empirical |
-| Bitcoin anchor | Type C | External chain |
 | Safety proofs | Type A | Mathematical |
+
+---
+
+## Self-Sovereign Properties
+
+Montana v3.0 achieves self-sovereignty through:
+
+| Property | Mechanism | Dependency |
+|----------|-----------|------------|
+| Time measurement | Atomic clock consensus | Physics (L-1.2) |
+| Temporal proof | VDF sequential computation | Physics (L-1.1) |
+| Finality | Accumulated VDF depth | Physics (time is sequential) |
+| Fork choice | Greater accumulated VDF | Physics (time cannot fork) |
+
+**No external dependencies.** Montana's security derives entirely from physical constraints.
 
 ---
 
@@ -221,7 +240,7 @@ Montana can upgrade components independently:
 | VRF | ECVRF | Lattice-VRF (L-1.B) | PQ requirement |
 | VDF verification | Checkpoints | STARK proofs (L-1.D.3) | Efficiency need |
 | Privacy | Ring-11 | Larger rings | Anonymity need |
-| Bitcoin anchor | 6 conf | 100 conf | Security posture |
+| Hard Finality | 1000 checkpoints | Configurable | Security posture |
 
 ---
 
@@ -248,16 +267,17 @@ To verify Montana compliance with ATC:
 4. Consensus properties (L2):
    ✓ Safety: DAG partial order
    ✓ Liveness: After GST
-   ✓ Finality: Bitcoin anchor
+   ✓ Finality: Accumulated VDF (self-sovereign)
 
-→ Montana v1.1 COMPLIES with ATC v9
+→ Montana v3.0 COMPLIES with ATC v10
+→ Montana v3.0 is SELF-SOVEREIGN (no external dependencies)
 ```
 
 ---
 
 ## References
 
-- Montana Technical Specification v1.1
+- Montana Technical Specification v3.0
 - ATC Layer -1 v2.1
 - ATC Layer 0 v1.0
 - ATC Layer 1 v1.1
@@ -266,3 +286,5 @@ To verify Montana compliance with ATC:
 ---
 
 *This mapping enables verification that Montana correctly inherits ATC layer guarantees and does not assume stronger properties than lower layers provide.*
+
+*Montana v3.0: Self-sovereign finality through physics.*

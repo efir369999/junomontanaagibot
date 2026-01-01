@@ -1,14 +1,15 @@
-# Ɉ Montana Technical Specification v2.0
+# Ɉ Montana Technical Specification v3.0
 
-**Protocol Version:** 7
-**Document Version:** 2.0
+**Protocol Version:** 8
+**Document Version:** 3.0
 **Date:** January 2026
 **Ticker:** $MONT
-**ATC Compatibility:** v9.0 (L-1 v2.1, L0 v1.0, L1 v1.1, L2 v1.0)
+**ATC Compatibility:** v10.0 (L-1 v2.1, L0 v1.0, L1 v1.1, L2 v1.0)
 
 > **Ɉ Montana** is a mechanism for asymptotic trust in the value of time.
 > **Ɉ** — Temporal Time Unit: lim(evidence → ∞) 1 Ɉ → 1 second
 > Built on ATC Layer 3+. See [MONTANA_ATC_MAPPING.md](MONTANA_ATC_MAPPING.md) for layer mapping.
+> **v3.0:** Self-sovereign finality through accumulated VDF.
 
 ---
 
@@ -19,7 +20,7 @@
 3. [Asymptotic Trust Consensus (ATC)](#3-asymptotic-trust-consensus-atc)
 4. [Layer 0: Atomic Time](#4-layer-0-atomic-time)
 5. [Layer 1: Temporal Proof](#5-layer-1-temporal-proof)
-6. [Layer 2: Bitcoin Anchor](#6-layer-2-bitcoin-anchor)
+6. [Layer 2: Accumulated Finality](#6-layer-2-accumulated-finality)
 7. [Heartbeat Structure](#7-heartbeat-structure)
 8. [Score System](#8-score-system)
 9. [Block Structure](#9-block-structure)
@@ -60,6 +61,7 @@ This document provides the complete technical specification for implementing the
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Ɉ MONTANA ARCHITECTURE                      │
 │                     (ATC Layer 3+ Implementation)                │
+│                     Self-Sovereign • Physics-Based               │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
@@ -72,9 +74,9 @@ This document provides the complete technical specification for implementing the
 │                          │                                       │
 │  ┌───────────────────────▼───────────────────────────────────┐  │
 │  │           MONTANA CONSENSUS (ATC L2 Patterns)              │  │
-│  │  Bitcoin Anchor → ATC L-2.6.4 (Anchor Finality)           │  │
-│  │  VDF Temporal  → ATC L-1.1 (VDF Primitive)                │  │
-│  │  Atomic Time   → ATC L-1.2, L-1.5 (Physical Constraints)  │  │
+│  │  Accumulated VDF → ATC L-2.6.3 (VDF-based Finality)       │  │
+│  │  VDF Temporal    → ATC L-1.1 (VDF Primitive)              │  │
+│  │  Atomic Time     → ATC L-1.2, L-1.5 (Physical Constraints)│  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                  │
 │  ┌───────────────────────────────────────────────────────────┐  │
@@ -209,7 +211,7 @@ Trust requirements approach certainty asymptotically as evidence accumulates acr
 |------------------|-----------|-------------|-------------|
 | Layer 0: Atomic Time | ATC L-1.2, L-1.5 | Physical measurement | 34 NTP servers |
 | Layer 1: VDF Temporal | ATC L-1.1 | Sequential computation | VDF heartbeats |
-| Layer 2: Bitcoin Anchor | ATC L-2.6.4 | Anchor finality | Bitcoin blockchain |
+| Layer 2: Accumulated Finality | ATC L-2.6.3 | VDF-based finality | Accumulated VDF depth |
 
 ### 3.3 ATC Layer Dependencies
 
@@ -220,7 +222,7 @@ Montana inherits guarantees from all ATC layers:
 | L-1 (Physics) | Atomic time, Landauer | Cannot be violated |
 | L0 (Computation) | SHA-3, SPHINCS+, ML-KEM | Post-quantum secure |
 | L1 (Primitives) | VDF, VRF, Commitment | Proven security |
-| L2 (Consensus) | DAG, BFT, Finality | Formal guarantees |
+| L2 (Consensus) | DAG, BFT, VDF Finality | Formal guarantees |
 
 **Closing Principle:** Montana may assume weaker guarantees than ATC provides; it cannot assume stronger guarantees without leaving known science.
 
@@ -375,7 +377,7 @@ VDF_OUTPUT_BYTES: int = 32
 VDF_BASE_ITERATIONS: int = 16777216      # 2^24 (~2.5 seconds)
 VDF_MAX_ITERATIONS: int = 268435456      # 2^28 (~40 seconds)
 VDF_STARK_CHECKPOINT_INTERVAL: int = 1000  # Save state every N iterations for STARK proof
-VDF_SEED_PREFIX: bytes = b"MONTANA_VDF_V7_"
+VDF_SEED_PREFIX: bytes = b"MONTANA_VDF_V8_"
 ```
 
 ### 5.2 VDF Structure
@@ -427,87 +429,91 @@ def compute_vdf(input_data: bytes, iterations: int) -> VDFProof:
 
 ---
 
-## 6. Montana Layer 2: Bitcoin Anchor
+## 6. Montana Layer 2: Accumulated Finality
 
-*Maps to ATC L-2.6.4 (Anchor-Based Finality)*
+*Maps to ATC L-2.6.3 (VDF-Based Finality)*
 
-Montana's Layer 2 anchors to Bitcoin for hard finality. This follows ATC L-2.6.4 patterns:
-- **Anchor security:** Inherits Bitcoin's proof-of-work security
-- **Finality type:** Type C (empirical — Bitcoin's 15+ years)
-- **Confirmation levels:** Configurable based on security requirements
+Montana's Layer 2 achieves finality through **accumulated VDF depth**. This provides self-sovereign finality based entirely on physics.
 
-### 6.1 Bitcoin Parameters
+### 6.1 Finality Model
 
 ```python
-BTC_BLOCK_TIME_SECONDS: int = 600
-BTC_DIFFICULTY_PERIOD: int = 2016
-BTC_HALVING_INTERVAL: int = 210000
-BTC_CONFIRMATIONS_SOFT: int = 1
-BTC_CONFIRMATIONS_MEDIUM: int = 6
-BTC_CONFIRMATIONS_STRONG: int = 100
-BTC_MAX_DRIFT_BLOCKS: int = 6
+# Finality through accumulated VDF checkpoints
+VDF_CHECKPOINT_TIME_SEC: float = 2.5     # Time per VDF checkpoint
+FINALITY_SOFT_CHECKPOINTS: int = 1       # ~2.5 seconds
+FINALITY_MEDIUM_CHECKPOINTS: int = 100   # ~4 minutes
+FINALITY_HARD_CHECKPOINTS: int = 1000    # ~40 minutes
 ```
 
-### 6.2 Bitcoin Anchor Structure
+### 6.2 Security Properties
+
+**Attack cost:** To rewrite N VDF checkpoints requires N × VDF_CHECKPOINT_TIME_SEC of sequential computation.
+
+```python
+def attack_cost_seconds(depth: int) -> float:
+    """
+    Calculate minimum time to rewrite history at given depth.
+
+    This is a PHYSICAL BOUND - cannot be reduced by:
+    - More hardware (VDF is sequential)
+    - More money (time cannot be purchased)
+    - Any optimization (physics constraint)
+    """
+    return depth * VDF_CHECKPOINT_TIME_SEC
+
+# Examples:
+# Soft finality (1 checkpoint): 2.5 seconds to attack
+# Medium finality (100 checkpoints): 250 seconds (~4 min) to attack
+# Hard finality (1000 checkpoints): 2500 seconds (~40 min) to attack
+```
+
+### 6.3 Finality Reference Structure
 
 ```python
 @dataclass
-class BitcoinAnchor:
-    height: int                 # u64 - Block height
-    block_hash: bytes           # 32 bytes - Block hash
-    merkle_root: bytes          # 32 bytes - Merkle root
-    timestamp: int              # u64 - Block timestamp
-    difficulty: int             # u64 - Compact difficulty
-    epoch: int                  # u32 - Halving epoch
-    confirmations: int          # u16 - Confirmations at anchor
+class FinalityReference:
+    """Reference to accumulated VDF finality state."""
+    depth: int                  # u64 - VDF checkpoint depth
+    vdf_root: bytes             # 32 bytes - Accumulated VDF chain tip
+    timestamp_ms: int           # u64 - Timestamp of this finality point
 
-    SIZE: int = 90  # bytes
+    SIZE: int = 48  # bytes
 
     def serialize(self) -> bytes:
         writer = ByteWriter()
-        writer.write_u64(self.height)
-        writer.write_raw(self.block_hash)
-        writer.write_raw(self.merkle_root)
-        writer.write_u64(self.timestamp)
-        writer.write_u64(self.difficulty)
-        writer.write_u32(self.epoch)
-        writer.write_u16(self.confirmations)
+        writer.write_u64(self.depth)
+        writer.write_raw(self.vdf_root)
+        writer.write_u64(self.timestamp_ms)
         return writer.to_bytes()
+
+    def finality_level(self) -> str:
+        if self.depth >= FINALITY_HARD_CHECKPOINTS:
+            return "hard"
+        elif self.depth >= FINALITY_MEDIUM_CHECKPOINTS:
+            return "medium"
+        elif self.depth >= FINALITY_SOFT_CHECKPOINTS:
+            return "soft"
+        else:
+            return "unconfirmed"
 ```
 
-### 6.3 Bitcoin API Endpoints
+### 6.4 Fork Choice Rule
 
 ```python
-BTC_API_ENDPOINTS: List[str] = [
-    "https://blockstream.info/api",
-    "https://mempool.space/api",
-    "https://blockchain.info",
-    "https://api.blockcypher.com/v1/btc/main"
-]
-BTC_API_CONSENSUS_MIN: int = 2  # Minimum agreeing sources
-
-async def get_bitcoin_block(height: int) -> Optional[BitcoinAnchor]:
+def select_best_chain(chains: List[Chain]) -> Chain:
     """
-    Fetch Bitcoin block from multiple APIs.
-    Requires consensus from at least 2 sources.
+    Fork choice: chain with greater accumulated VDF depth.
+
+    Ties broken by:
+    1. Greater VDF depth (more sequential work)
+    2. Earlier timestamp (if same depth)
+    3. Lower hash (deterministic tiebreaker)
     """
-    results = []
-    for api in BTC_API_ENDPOINTS:
-        try:
-            block = await fetch_block(api, height)
-            results.append(block)
-        except Exception:
-            continue
-
-    if len(results) < BTC_API_CONSENSUS_MIN:
-        return None
-
-    # Verify consensus
-    hashes = [r.block_hash for r in results]
-    if len(set(hashes)) > 1:
-        return None  # Disagreement
-
-    return results[0]
+    return max(chains, key=lambda c: (
+        c.accumulated_vdf_depth,
+        -c.tip_timestamp,
+        -int.from_bytes(c.tip_hash, 'big')
+    ))
 ```
 
 ---
@@ -530,8 +536,8 @@ class Heartbeat:
     # Layer 1: Temporal Proof
     vdf_proof: VDFProof             # Variable
 
-    # Layer 2: Bitcoin Anchor
-    btc_anchor: BitcoinAnchor       # 90 bytes
+    # Layer 2: Finality Reference
+    finality_ref: FinalityReference # 48 bytes
 
     # Metadata
     sequence: int                   # u64 - Heartbeat sequence
@@ -544,10 +550,10 @@ class Heartbeat:
         return sha3_256(self.serialize_for_signing())
 
     def is_cross_layer_consistent(self) -> bool:
-        """Atomic time must be within 20 minutes of BTC block time."""
-        btc_time_ms = self.btc_anchor.timestamp * 1000
-        diff = abs(self.atomic_time.timestamp_ms - btc_time_ms)
-        return diff <= 1_200_000  # 20 minutes
+        """Atomic time must be consistent with VDF progression."""
+        expected_time = self.finality_ref.timestamp_ms
+        diff = abs(self.atomic_time.timestamp_ms - expected_time)
+        return diff <= 60_000  # 1 minute tolerance
 ```
 
 ### 7.2 Heartbeat Validation
@@ -569,12 +575,12 @@ def validate_heartbeat(hb: Heartbeat, state: GlobalState) -> bool:
     if not verify_stark_proof(hb.vdf_proof):
         return False
 
-    # 4. Verify Bitcoin anchor
-    expected_btc = state.btc_hash
-    if hb.btc_anchor.block_hash != expected_btc:
-        # Allow up to BTC_MAX_DRIFT_BLOCKS behind
-        if not is_ancestor(hb.btc_anchor.block_hash, expected_btc, BTC_MAX_DRIFT_BLOCKS):
-            return False
+    # 4. Verify finality reference
+    if hb.finality_ref.depth < state.min_finality_depth:
+        return False
+
+    if hb.finality_ref.vdf_root != state.get_vdf_root_at_depth(hb.finality_ref.depth):
+        return False
 
     # 5. Cross-layer consistency
     if not hb.is_cross_layer_consistent():
@@ -597,7 +603,7 @@ def validate_heartbeat(hb: Heartbeat, state: GlobalState) -> bool:
 ```python
 SCORE_PRECISION: int = 1_000_000
 SCORE_MIN_HEARTBEATS: int = 1
-ACTIVITY_WINDOW_BLOCKS: int = 2016       # ~2 weeks in BTC blocks
+ACTIVITY_WINDOW_BLOCKS: int = 2016       # ~2 weeks at 10 min blocks
 INACTIVITY_PENALTY_RATE: float = 0.001
 
 def compute_score(epoch_heartbeats: int) -> float:
@@ -669,7 +675,7 @@ class BlockHeader:
     heartbeats_root: Hash           # 32 bytes (Merkle root)
     transactions_root: Hash         # 32 bytes (Merkle root)
     state_root: Hash                # 32 bytes
-    btc_anchor: BitcoinAnchor       # 90 bytes
+    finality_ref: FinalityReference # 48 bytes
 
     def serialize(self) -> bytes:
         writer = ByteWriter()
@@ -680,7 +686,7 @@ class BlockHeader:
         writer.write_raw(self.heartbeats_root.data)
         writer.write_raw(self.transactions_root.data)
         writer.write_raw(self.state_root.data)
-        writer.write_raw(self.btc_anchor.serialize())
+        writer.write_raw(self.finality_ref.serialize())
         return writer.to_bytes()
 ```
 
@@ -793,7 +799,7 @@ def get_block_start_time(block_number: int) -> int:
 2. Transaction enters mempool, propagates to network
 3. VDF checkpoint every 1 second provides ordering
 4. DAG-PHANTOM determines deterministic order across nodes
-5. Bitcoin anchor every ~10 minutes provides hard finality
+5. Accumulated VDF depth provides progressive finality
 
 **No TPS ceiling** — network processes transactions as they arrive.
 
@@ -887,8 +893,8 @@ class Transaction:
     atomic_source_bitmap: int       # u8
 
     # Layer 2
-    btc_height: int                 # u64
-    btc_hash: bytes                 # 32 bytes
+    finality_depth: int             # u64 - Reference finality depth
+    finality_root: bytes            # 32 bytes - VDF root at that depth
 
     # Anti-spam PoW
     pow_difficulty: int             # u8
@@ -1345,7 +1351,7 @@ def ecvrf_verify(public_key: bytes, input_data: bytes, proof: bytes) -> Optional
 ```python
 NETWORK_ID_MAINNET: int = 0x4D4F4E5441   # "MONTA"
 NETWORK_ID_TESTNET: int = 0x544553544E   # "TESTN"
-PROTOCOL_VERSION: int = 7
+PROTOCOL_VERSION: int = 8
 DEFAULT_PORT: int = 19656
 MESSAGE_MAGIC_MAINNET: bytes = b"MONT"
 MESSAGE_MAGIC_TESTNET: bytes = b"TEST"
@@ -1372,6 +1378,8 @@ class MessageType(IntEnum):
     NEW_BLOCK = 0x20
     NEW_HEARTBEAT = 0x21
     NEW_TRANSACTION = 0x22
+    GET_VDF_STATE = 0x30
+    VDF_STATE = 0x31
 ```
 
 ---
@@ -1396,8 +1404,8 @@ class MIPStatus(IntEnum):
 ```python
 SOFT_FORK_THRESHOLD: float = 0.95
 HARD_FORK_THRESHOLD: float = 0.95
-ACTIVATION_WINDOW: int = 2016            # BTC blocks (~2 weeks)
-TIMEOUT_EPOCHS: int = 2                  # ~8 years
+ACTIVATION_WINDOW_BLOCKS: int = 2016     # ~2 weeks at 10 min blocks
+TIMEOUT_EPOCHS: int = 2
 ```
 
 ### 18.3 Version Signaling
@@ -1450,11 +1458,12 @@ VDF_BASE_ITERATIONS = 16777216
 VDF_STARK_CHECKPOINT_INTERVAL = 1000
 
 # ==============================================================================
-# LAYER 2: BITCOIN
+# LAYER 2: ACCUMULATED FINALITY
 # ==============================================================================
-BTC_HALVING_INTERVAL = 210000
-BTC_CONFIRMATIONS_MEDIUM = 6
-BTC_MAX_DRIFT_BLOCKS = 6
+VDF_CHECKPOINT_TIME_SEC = 2.5
+FINALITY_SOFT_CHECKPOINTS = 1
+FINALITY_MEDIUM_CHECKPOINTS = 100
+FINALITY_HARD_CHECKPOINTS = 1000
 
 # ==============================================================================
 # SCORE
@@ -1492,7 +1501,7 @@ PRIVACY_FEE_T3 = 10
 # ==============================================================================
 # NETWORK
 # ==============================================================================
-PROTOCOL_VERSION = 7
+PROTOCOL_VERSION = 8
 DEFAULT_PORT = 19656
 MAX_BLOCK_SIZE = 4_194_304
 BLOCK_TIME_TARGET_SEC = 600
@@ -1508,7 +1517,7 @@ SHA3_256_OUTPUT_SIZE = 32
 # GOVERNANCE
 # ==============================================================================
 SOFT_FORK_THRESHOLD = 0.95
-ACTIVATION_WINDOW = 2016
+ACTIVATION_WINDOW_BLOCKS = 2016
 ```
 
 ---
@@ -1543,6 +1552,11 @@ getaccount(pubkey: str) -> AccountState
 getbalance(pubkey: str) -> int
 getscore(pubkey: str) -> float
 
+# Finality
+getfinalitydepth() -> int
+getvdfstate() -> VDFState
+getfinalityreference(depth: int) -> FinalityReference
+
 # Bot
 registerbot(bot_id: str, owner_pubkey: str) -> bool
 submitvalidation(user_id: str, challenge_id: str, response: str) -> bool
@@ -1555,18 +1569,26 @@ submitvalidation(user_id: str, challenge_id: str, response: str) -> bool
 subscribe("new_block")
 subscribe("new_heartbeat")
 subscribe("new_transaction")
+subscribe("finality_update")
 
 # Event payloads
 NewBlockEvent {
     hash: str
     height: int
     timestamp: int
+    finality_depth: int
 }
 
 NewHeartbeatEvent {
     id: str
     pubkey: str
     sequence: int
+}
+
+FinalityUpdateEvent {
+    depth: int
+    vdf_root: str
+    timestamp: int
 }
 ```
 
@@ -1625,10 +1647,10 @@ class GlobalState:
     chain_height: int               # Current block height
     chain_tip_hash: Hash            # Current chain tip
 
-    # Bitcoin anchor
-    btc_height: int                 # Last anchored BTC height
-    btc_hash: Hash                  # Last anchored BTC hash
-    btc_epoch: int                  # Current BTC halving epoch
+    # Finality state
+    accumulated_vdf_depth: int      # Total VDF checkpoints
+    vdf_root: Hash                  # Current VDF chain tip
+    min_finality_depth: int         # Minimum required finality
 
     # Supply tracking
     total_supply: int               # Total minted supply
@@ -1646,6 +1668,10 @@ class GlobalState:
 
     def get_all_pubkeys(self) -> List[PublicKey]:
         return list(self.accounts.keys())
+
+    def get_vdf_root_at_depth(self, depth: int) -> Optional[Hash]:
+        """Get VDF root at specific depth for validation."""
+        pass
 ```
 
 ---
@@ -1973,6 +1999,7 @@ class SyncManager:
         3. Verify header chain
         4. Download blocks in parallel
         5. Validate and apply blocks
+        6. Sync VDF state
         """
         # Get chain tips from peers
         tips = [peer.get_chain_tip() for peer in peers]
@@ -1999,6 +2026,9 @@ class SyncManager:
             if end % IBD_CHECKPOINT_INTERVAL == 0:
                 if not self.verify_checkpoint(end):
                     raise SyncError(f"Checkpoint mismatch at {end}")
+
+        # Sync VDF state
+        self.sync_vdf_state(peers)
 ```
 
 ### 24.2 Block Propagation
@@ -2056,7 +2086,7 @@ def reorganize_chain(
     if ancestor is None:
         return False  # Reorg too deep
 
-    # Calculate chain scores
+    # Calculate chain scores (based on accumulated VDF)
     old_score = compute_chain_score(old_chain)
     new_score = compute_chain_score(new_chain)
 
@@ -2095,7 +2125,7 @@ CREATE TABLE blocks (
     hash BLOB NOT NULL UNIQUE,
     parent_hash BLOB NOT NULL,
     timestamp_ms INTEGER NOT NULL,
-    btc_height INTEGER NOT NULL,
+    finality_depth INTEGER NOT NULL,
     data BLOB NOT NULL,  -- Serialized block
 
     INDEX idx_blocks_hash (hash),
@@ -2155,6 +2185,15 @@ CREATE TABLE heartbeats (
     INDEX idx_heartbeats_pubkey (pubkey),
     INDEX idx_heartbeats_height (block_height)
 );
+
+-- VDF State
+CREATE TABLE vdf_state (
+    depth INTEGER PRIMARY KEY,
+    vdf_root BLOB NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+
+    INDEX idx_vdf_depth (depth)
+);
 """;
 ```
 
@@ -2166,6 +2205,7 @@ class StorageConfig:
     db_path: str = "montana.db"
     blocks_dir: str = "blocks"
     chainstate_dir: str = "chainstate"
+    vdf_dir: str = "vdf"
 
     # Performance
     cache_size_mb: int = 512
@@ -2270,8 +2310,7 @@ BOOTSTRAP_NODES = [
 ```python
 # Genesis block parameters (to be set at launch)
 GENESIS_TIMESTAMP_MS: int = 0        # TBD: Launch timestamp (UTC)
-GENESIS_BTC_HEIGHT: int = 0          # TBD: Bitcoin block at launch
-GENESIS_BTC_HASH: bytes = b''        # TBD: Bitcoin block hash at launch
+GENESIS_VDF_ROOT: bytes = b''        # TBD: Initial VDF state
 
 # Genesis block structure
 def create_genesis_block() -> Block:
@@ -2283,14 +2322,10 @@ def create_genesis_block() -> Block:
     - No founder allocation
     - All coins from block rewards only
     """
-    btc_anchor = BitcoinAnchor(
-        height=GENESIS_BTC_HEIGHT,
-        block_hash=Hash(GENESIS_BTC_HASH),
-        merkle_root=Hash.zero(),
-        timestamp=GENESIS_TIMESTAMP_MS // 1000,
-        difficulty=0,
-        epoch=GENESIS_BTC_HEIGHT // 210000,
-        confirmations=0,
+    finality_ref = FinalityReference(
+        depth=0,
+        vdf_root=Hash(GENESIS_VDF_ROOT),
+        timestamp_ms=GENESIS_TIMESTAMP_MS,
     )
 
     header = BlockHeader(
@@ -2301,7 +2336,7 @@ def create_genesis_block() -> Block:
         heartbeats_root=Hash.zero(),
         transactions_root=Hash.zero(),
         state_root=Hash.zero(),
-        btc_anchor=btc_anchor,
+        finality_ref=finality_ref,
     )
 
     return Block(
@@ -2326,9 +2361,9 @@ def create_genesis_state() -> GlobalState:
     return GlobalState(
         chain_height=0,
         chain_tip_hash=genesis.block_hash(),
-        btc_height=GENESIS_BTC_HEIGHT,
-        btc_hash=Hash(GENESIS_BTC_HASH),
-        btc_epoch=GENESIS_BTC_HEIGHT // 210000,
+        accumulated_vdf_depth=0,
+        vdf_root=Hash(GENESIS_VDF_ROOT),
+        min_finality_depth=0,
         total_supply=0,           # Fair launch - no pre-mine
         circulating_supply=0,
         total_heartbeats=0,
@@ -2344,6 +2379,7 @@ def create_genesis_state() -> GlobalState:
 ```python
 # ==============================================================================
 # Ɉ MONTANA — MECHANISM FOR ASYMPTOTIC TRUST IN TIME VALUE
+# v3.0 — Self-Sovereign Finality
 # ==============================================================================
 PROJECT = "Ɉ Montana"
 SYMBOL = "Ɉ"
@@ -2376,14 +2412,12 @@ VDF_MAX_ITERATIONS = 268435456
 VDF_STARK_CHECKPOINT_INTERVAL = 1000
 
 # ==============================================================================
-# LAYER 2: BITCOIN
+# LAYER 2: ACCUMULATED FINALITY
 # ==============================================================================
-BTC_BLOCK_TIME_SECONDS = 600
-BTC_HALVING_INTERVAL = 210000
-BTC_CONFIRMATIONS_SOFT = 1
-BTC_CONFIRMATIONS_MEDIUM = 6
-BTC_CONFIRMATIONS_STRONG = 100
-BTC_MAX_DRIFT_BLOCKS = 6
+VDF_CHECKPOINT_TIME_SEC = 2.5
+FINALITY_SOFT_CHECKPOINTS = 1
+FINALITY_MEDIUM_CHECKPOINTS = 100
+FINALITY_HARD_CHECKPOINTS = 1000
 
 # ==============================================================================
 # BLOCK TIMING
@@ -2431,7 +2465,7 @@ PRIVACY_FEE_T3 = 10
 # ==============================================================================
 # NETWORK
 # ==============================================================================
-PROTOCOL_VERSION = 7
+PROTOCOL_VERSION = 8
 NETWORK_ID_MAINNET = 0x4D4F4E5441
 NETWORK_ID_TESTNET = 0x544553544E
 DEFAULT_PORT = 19656
@@ -2482,8 +2516,7 @@ KEY_ENCAPSULATION = "ML-KEM-768"
 # GENESIS (TBD at launch)
 # ==============================================================================
 GENESIS_TIMESTAMP_MS = 0             # Set at launch
-GENESIS_BTC_HEIGHT = 0               # Set at launch
-GENESIS_BTC_HASH = bytes(32)         # Set at launch
+GENESIS_VDF_ROOT = bytes(32)         # Set at launch
 ```
 
 ---
@@ -2496,8 +2529,10 @@ Mechanism for asymptotic trust in the value of time
 
 *lim(evidence → ∞) 1 Ɉ → 1 second*
 
+**Self-sovereign. Physics-based.**
+
 **$MONT**
 
-Technical Specification v2.0 | January 2026
+Technical Specification v3.0 | January 2026
 
 </div>

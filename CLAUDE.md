@@ -14,7 +14,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 3+: Ɉ Montana ($MONT)                            v2.0   │
+│  Layer 3+: Ɉ Montana ($MONT)                            v3.0   │
 │  Mechanism for asymptotic trust in the value of time           │
 │  Ɉ — TTU: lim(evidence → ∞) 1 Ɉ → 1 second                     │
 └─────────────────────────────────────────────────────────────────┘
@@ -62,7 +62,7 @@ This role covers the entire ATC architecture:
 | 0 | Computational Constraints | v1.0 ✓ | What is HARD |
 | 1 | Protocol Primitives | v1.1 ✓ | What is BUILDABLE |
 | 2 | Consensus Protocols | v1.0 ✓ | What is AGREEABLE |
-| 3+ | Ɉ Montana ($MONT) | v2.0 ✓ | Asymptotic trust in time value |
+| 3+ | Ɉ Montana ($MONT) | v3.0 ✓ | Asymptotic trust in time value |
 
 ---
 
@@ -136,10 +136,10 @@ I never assume the user is right or that I am right — instead, I treat every c
 | **Layer 0 Specification** | `./ATC v10/Layer 0/layer_0.md` | v1.0 |
 | **Layer 1 Specification** | `./ATC v10/Layer 1/layer_1.md` | v1.1 |
 | **Layer 2 Specification** | `./ATC v10/Layer 2/layer_2.md` | v1.0 |
-| **Ɉ Montana** | `./ATC v10/Layer 3+ Montana/README.md` | v2.0 |
-| **Ɉ Montana Whitepaper** | `./ATC v10/Layer 3+ Montana/WHITEPAPER.md` | v2.0 |
-| **Ɉ Montana Specification** | `./ATC v10/Layer 3+ Montana/MONTANA_TECHNICAL_SPECIFICATION.md` | v2.0 |
-| **Ɉ Montana ATC Mapping** | `./ATC v10/Layer 3+ Montana/MONTANA_ATC_MAPPING.md` | v2.0 |
+| **Ɉ Montana** | `./ATC v10/Layer 3+ Montana/README.md` | v3.0 |
+| **Ɉ Montana Whitepaper** | `./ATC v10/Layer 3+ Montana/WHITEPAPER.md` | v3.0 |
+| **Ɉ Montana Specification** | `./ATC v10/Layer 3+ Montana/MONTANA_TECHNICAL_SPECIFICATION.md` | v3.0 |
+| **Ɉ Montana ATC Mapping** | `./ATC v10/Layer 3+ Montana/MONTANA_ATC_MAPPING.md` | v3.0 |
 
 These are the authoritative documents for all ATC claims.
 
@@ -295,7 +295,7 @@ lim(evidence → ∞) 1 Ɉ → 1 second
 | Definition | lim(evidence → ∞) 1 Ɉ → 1 second | Asymptotic |
 | Verification | 34 NTP sources, 8 regions | L-1.2, L-1.5 |
 | Temporal Proof | VDF (SHAKE256, 2²⁴ iterations) | L-1.1 |
-| Finality | VDF → DAG → Anchor | L-2.6 |
+| Finality | VDF → DAG → Accumulated VDF | L-2.6 |
 | Cryptography | SPHINCS+, ML-KEM (post-quantum) | L-0.4 |
 | Total Supply | 1,260,000,000 Ɉ | — |
 | Pre-allocation | 0 | — |
@@ -411,6 +411,27 @@ The adversary **may or may not be able to** (Layer 0):
 
 ---
 
+## Documentation Style
+
+**Formulate through AFFIRMATION, never through NEGATION.**
+
+| Avoid | Instead |
+|-------|---------|
+| "Why we don't use X" | "What we use: Y" |
+| "Why not blockchain" | "Self-sovereign finality through VDF" |
+| "Unlike other systems..." | "Montana provides..." |
+| "We don't need X because..." | "Montana achieves Y through Z" |
+| Comparisons with alternatives | Direct statements of capability |
+| Justifications for absence | Descriptions of presence |
+
+**Principle:** Documentation describes what the system IS and DOES. It does not justify what it ISN'T or DOESN'T DO.
+
+**Example:**
+- BAD: "Why No External Blockchain? External blockchains provide economic security, but Montana..."
+- GOOD: "Self-Sovereign Finality: Montana achieves finality through accumulated VDF..."
+
+---
+
 ## Layer Interaction Rules
 
 1. **Layer -1 → Layer 0:** Physical bounds constrain computation
@@ -434,7 +455,7 @@ The adversary **may or may not be able to** (Layer 0):
    - Fault thresholds → validator set sizes
 
 5. **Layer 3+ implementations:** Must document all layer dependencies
-   - Montana: L-1.2 (atomic time), L-1.1 (VDF), L-2.5 (DAG), L-2.6 (finality)
+   - Montana: L-1.2 (atomic time), L-1.1 (VDF), L-2.5 (DAG), L-2.6 (accumulated VDF finality)
    - Each choice maps to specific ATC layer guarantees
    - Verification: MONTANA_ATC_MAPPING.md
 
@@ -474,9 +495,9 @@ The adversary **may or may not be able to** (Layer 0):
 - Sompolinsky, Zohar (2018) — PHANTOM
 
 **Layer 3+ (Temporal Time Unit):**
-- Montana TTU Whitepaper v2.0 (2026)
-- Montana Technical Specification v2.0 (2026)
-- Montana ATC Mapping (2026)
+- Montana TTU Whitepaper v3.0 (2026)
+- Montana Technical Specification v3.0 (2026)
+- Montana ATC Mapping v3.0 (2026)
 
 **Standards:**
 - BIPM SI Brochure, 9th edition (2019)

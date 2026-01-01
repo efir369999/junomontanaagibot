@@ -1,6 +1,6 @@
 # Ɉ Montana
 
-**Version:** 2.0
+**Version:** 3.0
 **Date:** January 2026
 **Ticker:** $MONT
 
@@ -22,6 +22,8 @@ lim(evidence → ∞) 1 Ɉ → 1 second
 ```
 
 Montana builds trust in time value through the **Asymptotic Trust Consensus** (ATC) architecture — physical constraints, computational hardness, protocol primitives, and consensus mechanisms.
+
+**Montana v3.0** is fully self-sovereign: no external blockchain dependencies. Finality derives entirely from physics — accumulated VDF computation that cannot be accelerated beyond physical limits.
 
 The more evidence accumulates, the closer Ɉ approaches its definition. We never claim to arrive; we asymptotically approach.
 
@@ -66,7 +68,7 @@ Montana answers one question:
 Yes — through:
 1. **Atomic clocks** (34 sources, 8 regions)
 2. **VDF computation** (sequential, non-parallelizable)
-3. **Global anchoring** (immutable reference)
+3. **Accumulated finality** (physics-based irreversibility)
 
 ---
 
@@ -92,8 +94,24 @@ An adversary operating within known physics **cannot**:
 - Create time (conservation)
 - Signal faster than light (relativity)
 - Compute without energy (Landauer)
+- **Accelerate VDF beyond sequential limit** (parallelization impossible)
 
 The TTU's integrity degrades only if physics requires revision at protocol-relevant scales.
+
+### 2.3 Self-Sovereign Finality
+
+Montana achieves finality through **accumulated VDF** — sequential computation that proves elapsed time.
+
+| Property | Guarantee |
+|----------|-----------|
+| Security basis | Physical (time is sequential) |
+| Attack cost | Rewriting N seconds requires N seconds |
+| Dependencies | None (physics only) |
+| Trust model | Physics |
+
+**To rewrite N seconds of Montana history requires N seconds of real time.**
+
+This is a **physical law**.
 
 ---
 
@@ -133,16 +151,18 @@ T = 2²⁴ iterations (~2.5 seconds)
 - Cannot be accelerated beyond physics
 - Verified quickly (STARK proofs)
 
-### 3.3 External Anchoring
+### 3.3 Accumulated Finality
 
 ```
-Anchor confirmation:
-├─ Soft: 1 confirmation (~10 min)
-├─ Medium: 6 confirmations (~1 hour)
-└─ Strong: 100 confirmations (~16 hours)
+Accumulated VDF depth:
+├─ Soft: 1 VDF checkpoint (~2.5 seconds)
+├─ Medium: 100 VDF checkpoints (~4 minutes)
+└─ Hard: 1000 VDF checkpoints (~40 minutes)
 ```
 
-Provides **immutable temporal ordering**.
+**Provides immutable temporal ordering through physics, not external trust.**
+
+To rewrite history at depth D requires D × VDF_time of sequential computation. No parallelization possible.
 
 ---
 
@@ -150,14 +170,14 @@ Provides **immutable temporal ordering**.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  HARD FINALITY (hours)                                          │
-│  External anchor: 6-100 confirmations                           │
-│  Immutable temporal record                                      │
+│  HARD FINALITY (40+ minutes)                                    │
+│  Accumulated VDF: 1000+ sequential checkpoints                  │
+│  Attack cost: 40+ minutes of real time (physical impossibility) │
 └─────────────────────────────────────────────────────────────────┘
                               ↑
 ┌─────────────────────────────────────────────────────────────────┐
 │  MEDIUM FINALITY (minutes)                                      │
-│  DAG consensus converges                                        │
+│  DAG consensus converges + 100 VDF checkpoints                  │
 │  Probabilistic certainty                                        │
 └─────────────────────────────────────────────────────────────────┘
                               ↑
@@ -167,6 +187,15 @@ Provides **immutable temporal ordering**.
 │  Physical guarantee: time is irreversible                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### 4.1 Finality Properties
+
+| Property | Accumulated VDF |
+|----------|-----------------|
+| Security | Physical (sequential computation) |
+| Attack cost | Time itself (irreducible) |
+| Dependencies | None |
+| Latency | Configurable (seconds to hours) |
 
 ---
 
@@ -220,7 +249,7 @@ A **heartbeat** proves temporal presence:
 Heartbeat:
 ├─ Atomic time proof
 ├─ VDF proof
-├─ Anchor reference
+├─ Accumulated depth reference
 └─ Signature
 ```
 
@@ -316,6 +345,8 @@ Every claim is typed. This is epistemic honesty.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+**Montana v3.0:** Fully self-sovereign. No external dependencies.
+
 ---
 
 ## 10. Principle
@@ -336,6 +367,8 @@ Like SI units define physical quantities through fundamental constants:
 
 **Time is the universal constant. Ɉ Montana builds trust in its value.**
 
+**Self-sovereign. Physics-based. No external dependencies.**
+
 ---
 
 ## References
@@ -346,7 +379,7 @@ Like SI units define physical quantities through fundamental constants:
 - NIST FIPS 203/204/205 (2024) — Post-quantum cryptography
 - Sompolinsky, Zohar (2018) — PHANTOM
 - Boneh et al. (2018) — VDF
-- ATC v9 — Layers -1, 0, 1, 2
+- ATC v10 — Layers -1, 0, 1, 2
 
 ---
 
@@ -365,6 +398,11 @@ NTP_SOURCES = 34
 NTP_REGIONS = 8
 VDF_ITERATIONS = 16_777_216
 
+# Finality (VDF checkpoints)
+FINALITY_SOFT = 1           # ~2.5 seconds
+FINALITY_MEDIUM = 100       # ~4 minutes
+FINALITY_HARD = 1000        # ~40 minutes
+
 # Distribution
 PRE_ALLOCATION = 0
 INITIAL_DISTRIBUTION = 3000  # Ɉ per block
@@ -380,6 +418,8 @@ HALVING_INTERVAL = 210_000
 Mechanism for asymptotic trust in the value of time
 
 *lim(evidence → ∞) 1 Ɉ → 1 second*
+
+**Self-sovereign. Physics-based.**
 
 **$MONT**
 

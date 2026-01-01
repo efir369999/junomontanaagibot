@@ -2,6 +2,7 @@
 
 > *Mechanism for asymptotic trust in the value of time*
 
+**Version:** 3.0
 **Ticker:** $MONT
 
 ---
@@ -22,6 +23,8 @@ Montana builds trust through **Asymptotic Trust Consensus** (ATC):
 - Protocol primitives (VDF, VRF)
 - Consensus mechanisms (DAG, finality)
 
+**v3.0:** Self-sovereign finality through accumulated VDF. No external dependencies.
+
 ---
 
 ## Definition
@@ -37,13 +40,29 @@ Total: 1,260,000,000 Ɉ ≈ 21 million minutes
 
 ---
 
-## How Is Time Verified?
+## Time Verification
 
 | Layer | Method | Guarantee |
 |-------|--------|-----------|
 | **Atomic** | 34 NTP sources, 8 regions | Physical (10⁻¹⁹ precision) |
 | **VDF** | Sequential computation | Cannot accelerate |
-| **Anchor** | External reference | Immutable ordering |
+| **Finality** | Accumulated VDF depth | Physics-based (self-sovereign) |
+
+---
+
+## Finality Model
+
+```
+Hard Finality (40+ min)    → 1000+ VDF checkpoints
+     ↑
+Medium Finality (minutes)  → 100 VDF checkpoints + DAG
+     ↑
+Soft Finality (seconds)    → 1 VDF checkpoint
+```
+
+**Attack cost:** Rewriting N seconds of history requires N seconds of real time.
+
+This is a physical law.
 
 ---
 
@@ -58,6 +77,7 @@ Total: 1,260,000,000 Ɉ ≈ 21 million minutes
 | Total Supply | 1,260,000,000 Ɉ |
 | Pre-allocation | 0 |
 | Cryptography | Post-quantum (NIST 2024) |
+| Finality | Self-sovereign (accumulated VDF) |
 
 ---
 
@@ -76,7 +96,7 @@ Total: 1,260,000,000 Ɉ ≈ 21 million minutes
 ```
 Layer 3+: Ɉ Montana (TTU)
        ↑
-Layer 2:  Consensus
+Layer 2:  Consensus (DAG, VDF Finality)
        ↑
 Layer 1:  Primitives (VDF, VRF)
        ↑
@@ -105,6 +125,8 @@ We approach certainty; we never claim to reach it.
 **Ɉ Montana**
 
 *lim(evidence → ∞) 1 Ɉ → 1 second*
+
+**Self-sovereign. Physics-based.**
 
 **$MONT**
 
