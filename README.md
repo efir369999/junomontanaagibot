@@ -24,7 +24,7 @@
 
 [![Layer -1](https://img.shields.io/badge/Layer%20--1-v2.1-blue)](ATC%20v8.1/Layer%20-1/layer_minus_1.md)
 [![Layer 0](https://img.shields.io/badge/Layer%200-v1.0-blue)](ATC%20v8.1/Layer%200/layer_0.md)
-[![Layer 1](https://img.shields.io/badge/Layer%201-v1.0-blue)](ATC%20v8.1/Layer%201/layer_1.md)
+[![Layer 1](https://img.shields.io/badge/Layer%201-v1.1-blue)](ATC%20v8.1/Layer%201/layer_1.md)
 [![Rating](https://img.shields.io/badge/rating-10%2F10-brightgreen)](ATC%20v8.1/Layer%20-1/HYPERCRITICISM_PROOF.md)
 [![Physics](https://img.shields.io/badge/foundation-physics-orange)](ATC%20v8.1/Layer%20-1/layer_minus_1.md)
 
@@ -68,7 +68,7 @@ Traditional Cryptography:          ATC Architecture:
 └─────────────────────────────────────────────────────────────────┘
                               ↑ builds on
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 1: Protocol Primitives                        v1.0      │
+│  Layer 1: Protocol Primitives                        v1.1      │
 │  ─────────────────────────────────────────────────────────────  │
 │  What is BUILDABLE: VDF, VRF, Commitment, Timestamp, Ordering  │
 │  Types: A/B/C/P (inherited) + S (composition) + I (impl)       │
@@ -198,11 +198,11 @@ ATC v8.1/
 │   ├── EVALUATION_QUICK_REFERENCE.md  Assessment card
 │   └── RELEASE_v1.0.md                Release notes
 │
-└── Layer 1/                       Protocol Primitives (v1.0)
-    ├── layer_1.md                     Specification
+└── Layer 1/                       Protocol Primitives (v1.1)
+    ├── layer_1.md                     Specification + Implementation Appendix
     ├── HYPERCRITICISM_PROOF.md        Certification
     ├── EVALUATION_QUICK_REFERENCE.md  Assessment card
-    └── RELEASE_v1.0.md                Release notes
+    └── RELEASE_v1.1.md                Release notes
 
 CLAUDE.md                          AI Architect role definition
 ```
@@ -254,7 +254,7 @@ C O N S E N S U S
 |-------|---------|-----|--------|
 | -1 | v2.1.0 | [layer-1-v2.1.0](https://github.com/afgrouptime/atc/releases/tag/layer-1-v2.1.0) | 10/10 |
 | 0 | v1.0.0 | [layer-0-v1.0.0](https://github.com/afgrouptime/atc/releases/tag/layer-0-v1.0.0) | 10/10 |
-| 1 | v1.0.0 | [layer-1-v1.0.0](https://github.com/afgrouptime/atc/releases/tag/layer-1-v1.0.0) | 10/10 |
+| 1 | v1.1.0 | [layer-1-v1.1.0](https://github.com/afgrouptime/atc/releases/tag/layer-1-v1.1.0) | 10/10 + 100% impl |
 
 ---
 

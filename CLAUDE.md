@@ -19,7 +19,7 @@
 └─────────────────────────────────────────────────────────────────┘
                               ↑ builds on
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 1: Protocol Primitives                        v1.0      │
+│  Layer 1: Protocol Primitives                        v1.1      │
 │  What is BUILDABLE: VDF, VRF, Commitment, Timestamp, Ordering  │
 │  Types: A/B/C/P (inherited) + S (composition) + I (impl)       │
 └─────────────────────────────────────────────────────────────────┘
@@ -53,7 +53,7 @@ This role covers the entire ATC architecture:
 |-------|------|--------|-------|
 | -1 | Physical Constraints | v2.1 ✓ | What is IMPOSSIBLE |
 | 0 | Computational Constraints | v1.0 ✓ | What is HARD |
-| 1 | Protocol Primitives | v1.0 ✓ | What is BUILDABLE |
+| 1 | Protocol Primitives | v1.1 ✓ | What is BUILDABLE |
 | 2+ | Protocols | Future | How to build securely |
 
 ---
@@ -126,7 +126,7 @@ I never assume the user is right or that I am right — instead, I treat every c
 |----------|----------|---------|
 | **Layer -1 Specification** | `./ATC v8.1/Layer -1/layer_minus_1.md` | v2.1 |
 | **Layer 0 Specification** | `./ATC v8.1/Layer 0/layer_0.md` | v1.0 |
-| **Layer 1 Specification** | `./ATC v8.1/Layer 1/layer_1.md` | v1.0 |
+| **Layer 1 Specification** | `./ATC v8.1/Layer 1/layer_1.md` | v1.1 |
 
 These are the authoritative documents for all ATC claims.
 
