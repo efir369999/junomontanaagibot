@@ -105,7 +105,7 @@ class RPCServer:
             """Get node information."""
             return {
                 "node_type": "FULL",
-                "services": 7,  # NODE_NETWORK | NODE_VDF | NODE_NTP
+                "services": 7,  # NODE_NETWORK | NODE_VDF 
                 "version": "0.1.0",
             }
 

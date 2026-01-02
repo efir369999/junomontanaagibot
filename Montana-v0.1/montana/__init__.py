@@ -26,7 +26,6 @@ from montana.core.block import Block, BlockHeader
 from montana.core.heartbeat import FullHeartbeat, LightHeartbeat
 from montana.core.vdf import SHAKE256VDF as VDFComputer
 from montana.core.vdf_accumulator import VDFAccumulator, FinalityLevel
-from montana.core.atomic_time import AtomicTimeSynchronizer as AtomicTimeSource
 
 # Crypto exports
 from montana.crypto.hash import sha3_256, shake256
@@ -61,7 +60,6 @@ __all__ = [
     "VDFComputer",
     "VDFAccumulator",
     "FinalityLevel",
-    "AtomicTimeSource",
     # Crypto
     "sha3_256",
     "shake256",

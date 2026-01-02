@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use winterfell::StarkProof;
+use winterfell::Proof;
 
 /// Errors that can occur during VDF proof operations
 #[derive(Error, Debug)]
@@ -42,9 +42,9 @@ pub struct VdfProof {
 }
 
 impl VdfProof {
-    /// Create a new VDF proof from winterfell StarkProof
+    /// Create a new VDF proof from winterfell Proof
     pub fn from_stark_proof(
-        proof: StarkProof,
+        proof: Proof,
         iterations: u64,
         checkpoint_interval: u64,
         security_bits: u8,
@@ -77,8 +77,8 @@ impl VdfProof {
     }
 
     /// Get the raw STARK proof
-    pub fn get_stark_proof(&self) -> Result<StarkProof, VdfError> {
-        StarkProof::from_bytes(&self.proof_bytes)
+    pub fn get_stark_proof(&self) -> Result<Proof, VdfError> {
+        Proof::from_bytes(&self.proof_bytes)
             .map_err(|e| VdfError::SerializationError(format!("Invalid STARK proof: {:?}", e)))
     }
 }
@@ -100,6 +100,12 @@ pub struct VdfProofConfig {
 
     /// Blowup factor for Reed-Solomon encoding
     pub blowup_factor: usize,
+
+    /// FRI folding factor
+    pub fri_folding_factor: usize,
+
+    /// FRI max remainder size
+    pub fri_max_remainder_size: usize,
 }
 
 impl Default for VdfProofConfig {
@@ -110,6 +116,8 @@ impl Default for VdfProofConfig {
             security_bits: 128,
             num_queries: 30,
             blowup_factor: 8,
+            fri_folding_factor: 4,
+            fri_max_remainder_size: 255,  // Must be 2^n - 1
         }
     }
 }

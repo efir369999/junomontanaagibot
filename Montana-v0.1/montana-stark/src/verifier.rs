@@ -8,6 +8,7 @@ use crate::vdf_air::{Felt, VdfAir, VdfPublicInputs};
 
 use winter_air::{FieldExtension, ProofOptions};
 use winter_crypto::{hashers::Blake3_256, DefaultRandomCoin};
+use winterfell::AcceptableOptions;
 
 // Type aliases for STARK components (must match prover)
 type VdfHasher = Blake3_256<Felt>;
@@ -45,16 +46,20 @@ pub fn verify_proof(
     // Get the STARK proof
     let stark_proof = proof.get_stark_proof()?;
 
-    // Create proof options (must match prover options)
-    let options = ProofOptions::new(
-        30,  // num_queries
-        8,   // blowup_factor
-        0,   // grinding factor
-        FieldExtension::None,
-    );
+    // Create acceptable options for verification
+    let acceptable_options = AcceptableOptions::OptionSet(vec![
+        ProofOptions::new(
+            30,  // num_queries
+            8,   // blowup_factor
+            0,   // grinding factor
+            FieldExtension::None,
+            4,   // fri_folding_factor
+            255, // fri_max_remainder_size (must be 2^n - 1)
+        ),
+    ]);
 
     // Verify using winterfell
-    match winterfell::verify::<VdfAir, VdfHasher, VdfRandomCoin>(stark_proof, pub_inputs, &options) {
+    match winterfell::verify::<VdfAir, VdfHasher, VdfRandomCoin>(stark_proof, pub_inputs, &acceptable_options) {
         Ok(_) => Ok(true),
         Err(e) => {
             // Log verification failure reason
@@ -83,14 +88,18 @@ pub fn verify_proof_with_options(
     let pub_inputs = VdfPublicInputs::new(input, output, iterations);
     let stark_proof = proof.get_stark_proof()?;
 
-    let options = ProofOptions::new(
-        num_queries,
-        blowup_factor,
-        0,
-        FieldExtension::None,
-    );
+    let acceptable_options = AcceptableOptions::OptionSet(vec![
+        ProofOptions::new(
+            num_queries,
+            blowup_factor,
+            0,
+            FieldExtension::None,
+            4,   // fri_folding_factor
+            255, // fri_max_remainder_size (must be 2^n - 1)
+        ),
+    ]);
 
-    match winterfell::verify::<VdfAir, VdfHasher, VdfRandomCoin>(stark_proof, pub_inputs, &options) {
+    match winterfell::verify::<VdfAir, VdfHasher, VdfRandomCoin>(stark_proof, pub_inputs, &acceptable_options) {
         Ok(_) => Ok(true),
         Err(_) => Ok(false),
     }

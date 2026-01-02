@@ -1,7 +1,9 @@
 """
-Ɉ Montana Protocol Constants v3.1
+Ɉ Montana Protocol Constants v3.2
 
 All protocol constants per MONTANA_TECHNICAL_SPECIFICATION.md §19, §28.
+
+v3.2: UTC finality model, no external time sources, ASIC-resistant by design.
 """
 
 from typing import Dict, List, Tuple
@@ -32,7 +34,7 @@ RESERVED_UNITS: int = 0
 # ==============================================================================
 # NODE TYPES (2 types only)
 # ==============================================================================
-NODE_TYPE_FULL: int = 1                     # Full Node: Full history + VDF + NTP
+NODE_TYPE_FULL: int = 1                     # Full Node: Full history + VDF
 NODE_TYPE_LIGHT: int = 2                    # Light Node: History from connection only
 NODE_TYPES_TOTAL: int = 2                   # Exactly 2 node types in protocol
 
@@ -56,68 +58,7 @@ TIER_WEIGHTS: Dict[int, float] = {
 }
 
 # ==============================================================================
-# LAYER 0: ATOMIC TIME
-# ==============================================================================
-NTP_TOTAL_SOURCES: int = 34
-NTP_MIN_SOURCES_CONSENSUS: int = 18         # >50% required
-NTP_MIN_SOURCES_CONTINENT: int = 2          # Per inhabited continent
-NTP_MIN_SOURCES_POLE: int = 1               # Per polar region
-NTP_MIN_REGIONS_TOTAL: int = 5              # Minimum distinct regions
-NTP_QUERY_TIMEOUT_MS: int = 2000
-NTP_MAX_DRIFT_MS: int = 1000
-NTP_MAX_RETRY: int = 3
-NTP_QUERY_INTERVAL_SEC: int = 60
-
-# NTP Sources by Region (34 total, 8 regions)
-NTP_SOURCES: Dict[str, List[Tuple[str, str, str]]] = {
-    "EUROPE": [
-        ("PTB", "ptbtime1.ptb.de", "Germany"),
-        ("NPL", "ntp1.npl.co.uk", "UK"),
-        ("LNE-SYRTE", "ntp.obspm.fr", "France"),
-        ("METAS", "ntp.metas.ch", "Switzerland"),
-        ("INRIM", "ntp1.inrim.it", "Italy"),
-        ("VSL", "ntp.vsl.nl", "Netherlands"),
-        ("ROA", "ntp.roa.es", "Spain"),
-        ("GUM", "tempus1.gum.gov.pl", "Poland"),
-    ],
-    "ASIA": [
-        ("NICT", "ntp.nict.jp", "Japan"),
-        ("NIM", "ntp.nim.ac.cn", "China"),
-        ("KRISS", "time.kriss.re.kr", "South Korea"),
-        ("NPLI", "time.nplindia.org", "India"),
-        ("VNIIFTRI", "ntp2.vniiftri.ru", "Russia"),
-        ("TL", "time.stdtime.gov.tw", "Taiwan"),
-        ("INPL", "ntp.inpl.gov.il", "Israel"),
-    ],
-    "NORTH_AMERICA": [
-        ("NIST", "time.nist.gov", "USA"),
-        ("USNO", "tock.usno.navy.mil", "USA"),
-        ("NRC", "time.nrc.ca", "Canada"),
-        ("CENAM", "ntp.cenam.mx", "Mexico"),
-    ],
-    "SOUTH_AMERICA": [
-        ("ONRJ", "ntp.on.br", "Brazil"),
-        ("INTI", "ntp.inti.gob.ar", "Argentina"),
-        ("CMM", "ntp.cmm.cl", "Chile"),
-    ],
-    "AFRICA": [
-        ("SANSA", "ntp.sansa.org.za", "South Africa"),
-        ("INM", "ntp.inm.gov.eg", "Egypt"),
-    ],
-    "OCEANIA": [
-        ("NMI", "time.nmi.gov.au", "Australia"),
-        ("MSL", "ntp.msl.irl.cri.nz", "New Zealand"),
-    ],
-    "ANTARCTICA": [
-        ("MCMURDO", "ntp.mcmurdo.aq", "Antarctica"),
-    ],
-    "ARCTIC": [
-        ("SVALBARD", "ntp.svalbard.no", "Norway"),
-    ],
-}
-
-# ==============================================================================
-# LAYER 1: VDF (Verifiable Delay Function)
+# LAYER 0-1: VDF (Verifiable Delay Function)
 # ==============================================================================
 VDF_HASH_FUNCTION: str = "SHAKE256"
 VDF_BASE_ITERATIONS: int = 16_777_216       # 2^24 (~2.5 seconds)
@@ -126,12 +67,21 @@ VDF_MIN_ITERATIONS: int = 1_048_576         # 2^20
 VDF_STARK_CHECKPOINT_INTERVAL: int = 1000   # STARK proof every 1000 iterations
 
 # ==============================================================================
-# LAYER 2: ACCUMULATED FINALITY
+# LAYER 2: UTC FINALITY (v3.2)
 # ==============================================================================
-VDF_CHECKPOINT_TIME_SEC: float = 2.5        # Target time per checkpoint
-FINALITY_SOFT_CHECKPOINTS: int = 1          # ~2.5 seconds
-FINALITY_MEDIUM_CHECKPOINTS: int = 100      # ~4 minutes
-FINALITY_HARD_CHECKPOINTS: int = 1000       # ~40 minutes
+# Time consensus
+TIME_TOLERANCE_SEC: int = 1                  # ±1 second UTC tolerance between nodes
+FINALITY_INTERVAL_SEC: int = 60              # 1 minute — finality boundary interval
+
+# Finality levels (UTC boundaries passed)
+FINALITY_SOFT_BOUNDARIES: int = 1            # 1 minute (1 boundary)
+FINALITY_MEDIUM_BOUNDARIES: int = 2          # 2 minutes (2 boundaries)
+FINALITY_HARD_BOUNDARIES: int = 3            # 3 minutes (3 boundaries)
+
+# Legacy aliases for compatibility
+FINALITY_SOFT_CHECKPOINTS: int = FINALITY_SOFT_BOUNDARIES
+FINALITY_MEDIUM_CHECKPOINTS: int = FINALITY_MEDIUM_BOUNDARIES
+FINALITY_HARD_CHECKPOINTS: int = FINALITY_HARD_BOUNDARIES
 
 # ==============================================================================
 # SCORE SYSTEM
@@ -191,7 +141,7 @@ PEDERSEN_H_GENERATOR_SEED: bytes = b"MONTANA_PEDERSEN_H_V1"
 # ==============================================================================
 # NETWORK PROTOCOL
 # ==============================================================================
-PROTOCOL_VERSION: int = 8
+PROTOCOL_VERSION: int = 9
 NETWORK_ID_MAINNET: int = 0x4D4F4E5441      # "MONTA"
 NETWORK_ID_TESTNET: int = 0x544553544E      # "TESTN"
 DEFAULT_PORT: int = 19656
@@ -247,7 +197,6 @@ BAN_DURATION_PERMANENT: int = -1
 SERVICE_FULL_NODE: int = 0x01
 SERVICE_LIGHT_NODE: int = 0x02
 SERVICE_VDF: int = 0x04
-SERVICE_NTP: int = 0x08
 SERVICE_RELAY: int = 0x10
 
 # Bootstrap nodes
@@ -257,7 +206,7 @@ BOOTSTRAP_NODES: List[Dict] = [
         "ip": "176.124.208.93",
         "port": 19656,
         "region": "EU",
-        "services": SERVICE_FULL_NODE | SERVICE_VDF | SERVICE_NTP,
+        "services": SERVICE_FULL_NODE | SERVICE_VDF,
     },
 ]
 
@@ -357,8 +306,10 @@ MAX_BLOCKS_PER_REQUEST: int = 500
 # ==============================================================================
 # VDF TIMING
 # ==============================================================================
-VDF_CHECKPOINT_INTERVAL_SEC: float = 2.5
-HEARTBEAT_INTERVAL_MS: int = 60000        # 1 minute
+# VDF proves participation in finality window (not speed competition)
+# Hardware that completes faster simply waits for UTC boundary
+VDF_CHECKPOINT_INTERVAL_SEC: float = 60.0    # 1 minute (aligned with finality)
+HEARTBEAT_INTERVAL_MS: int = 60000           # 1 minute
 
 # ==============================================================================
 # FEES

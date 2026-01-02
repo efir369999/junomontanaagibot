@@ -1,7 +1,7 @@
-# Ɉ Montana Technical Specification v3.1
+# Ɉ Montana Technical Specification v3.2
 
-**Protocol Version:** 8
-**Document Version:** 3.1
+**Protocol Version:** 9
+**Document Version:** 3.2
 **Date:** January 2026
 **Ticker:** $MONT
 **ATC Compatibility:** v10.0 (L-1 v2.1, L0 v1.0, L1 v1.1, L2 v1.0)
@@ -9,7 +9,7 @@
 > **Ɉ Montana** is a mechanism for asymptotic trust in the value of time.
 > **Ɉ** — Temporal Time Unit: lim(evidence → ∞) 1 Ɉ → 1 second
 > Built on ATC Layer 3+. See [MONTANA_ATC_MAPPING.md](MONTANA_ATC_MAPPING.md) for layer mapping.
-> **v3.1:** Explicit tier system (1-2-3), node type definitions.
+> **v3.2:** UTC finality model, no external time sources, ASIC-resistant by design.
 
 ---
 
@@ -18,7 +18,7 @@
 1. [Overview](#1-overview)
 2. [Time Unit Specification](#2-time-unit-specification)
 3. [Asymptotic Trust Consensus (ATC)](#3-asymptotic-trust-consensus-atc)
-4. [Layer 0: Atomic Time](#4-layer-0-atomic-time)
+4. [Layer 0: Sequential Computation](#4-layer-0-sequential-computation)
 5. [Layer 1: Temporal Proof](#5-layer-1-temporal-proof)
 6. [Layer 2: Accumulated Finality](#6-layer-2-accumulated-finality)
 7. [Heartbeat Structure](#7-heartbeat-structure)
@@ -77,7 +77,6 @@ This document provides the complete technical specification for implementing the
 │  │       FULL NODE          │  │        LIGHT NODE            │ │
 │  │  • Full history storage  │  │  • From connection only      │ │
 │  │  • VDF computation       │  │  • No VDF                    │ │
-│  │  • 34 NTP sources        │  │  • No NTP query              │ │
 │  │  • Full validation       │  │  • Relies on Full Nodes      │ │
 │  └────────────┬─────────────┘  └──────────────┬───────────────┘ │
 │               │                                │                 │
@@ -93,7 +92,7 @@ This document provides the complete technical specification for implementing the
 │  │           MONTANA CONSENSUS (ATC L2 Patterns)              │  │
 │  │  Accumulated VDF → ATC L-2.6.3 (VDF-based Finality)       │  │
 │  │  VDF Temporal    → ATC L-1.1 (VDF Primitive)              │  │
-│  │  Atomic Time     → ATC L-1.2, L-1.5 (Physical Constraints)│  │
+│  │  Sequentiality   → ATC L-1 (Physical Constraints)         │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                                                                  │
 │  ┌───────────────────────────────────────────────────────────┐  │
@@ -109,7 +108,7 @@ ATC Foundation:
 │  ATC L2:  Consensus (Safety, Liveness, Finality, BFT)          │
 │  ATC L1:  Primitives (VDF, VRF, Commitment, Timestamp)         │
 │  ATC L0:  Computation (SHA-3, ML-KEM, SPHINCS+, MLWE)          │
-│  ATC L-1: Physics (Atomic time, Landauer, Light speed)         │
+│  ATC L-1: Physics (Sequentiality, Landauer, Light speed)       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -129,24 +128,22 @@ class NodeType(IntEnum):
     LIGHT = 2   # Light Node: Stores history from connection moment only
 ```
 
-| Node Type | Storage | VDF | NTP | Tier |
-|-----------|---------|-----|-----|------|
-| **Full Node** | Full blockchain history (downloads all) | Yes | Yes (34 sources) | Tier 1 |
-| **Light Node** | From connection moment only | No | No | Tier 2 |
+| Node Type | Storage | VDF | Tier |
+|-----------|---------|-----|------|
+| **Full Node** | Full blockchain history (downloads all) | Yes | Tier 1 |
+| **Light Node** | From connection moment only | No | Tier 2 |
 
 **Full Node (Tier 1):**
 - Downloads and stores **entire blockchain history**
 - Computes VDF proofs (sequential, non-parallelizable)
-- Queries 34 NTP atomic time sources
 - Validates all blocks and transactions
-- Produces full heartbeats (VDF + NTP + signature)
+- Produces full heartbeats (VDF + signature)
 - **Required for network security**
 
 **Light Node (Tier 2):**
 - Stores history **only from its connection moment** (mandatory)
 - Does NOT download full blockchain history
 - Does NOT compute VDF
-- Does NOT query NTP directly
 - Validates blocks from connection onward
 - Produces light heartbeats (timestamp verified against Full Nodes)
 - Relies on Full Nodes for historical security
@@ -191,7 +188,6 @@ TIER_WEIGHTS = {
 class FullHeartbeat:
     """Tier 1: Full Node heartbeat with complete proofs."""
     pubkey: PublicKey
-    atomic_time: AtomicTimeProof     # 34 NTP sources
     vdf_proof: VDFProof              # Sequential computation proof
     finality_ref: FinalityReference
     signature: Signature             # SPHINCS+ (17,088 bytes)
@@ -200,7 +196,7 @@ class FullHeartbeat:
 class LightHeartbeat:
     """Tier 2/3: Light heartbeat without VDF computation."""
     pubkey: PublicKey
-    timestamp_ms: int                # Verified against atomic time
+    timestamp_ms: int                # Verified against VDF timeline
     source: HeartbeatSource          # LIGHT_NODE, TG_BOT, TG_USER
     community_id: Optional[str]      # Telegram chat ID (for TG sources)
     signature: Signature             # SPHINCS+ (17,088 bytes)
@@ -215,7 +211,6 @@ class LightHeartbeat:
 | Download full history | **Yes** | No | No |
 | Store from connection | **Yes** | **Yes** | No |
 | VDF computation | **Yes** | No | No |
-| NTP query (34 sources) | **Yes** | No | No |
 | Own TG Bot/Channel | No | Optional | No |
 | Be in TG Community | No | No | **Yes** |
 | Montana wallet | **Yes** | **Yes** | **Yes** |
@@ -334,7 +329,7 @@ Trust requirements approach certainty asymptotically as evidence accumulates acr
 
 | Montana Internal | ATC Layer | Trust Model | Data Source |
 |------------------|-----------|-------------|-------------|
-| Layer 0: Atomic Time | ATC L-1.2, L-1.5 | Physical measurement | 34 NTP servers |
+| Layer 0: VDF Computation | ATC L-1.1 | Sequential computation | SHAKE256 iteration |
 | Layer 1: VDF Temporal | ATC L-1.1 | Sequential computation | VDF heartbeats |
 | Layer 2: Accumulated Finality | ATC L-2.6.3 | VDF-based finality | Accumulated VDF depth |
 
@@ -344,7 +339,7 @@ Montana inherits guarantees from all ATC layers:
 
 | ATC Layer | Montana Uses | Constraint |
 |-----------|--------------|------------|
-| L-1 (Physics) | Atomic time, Landauer | Cannot be violated |
+| L-1 (Physics) | Sequentiality, Landauer | Cannot be violated |
 | L0 (Computation) | SHA-3, SPHINCS+, ML-KEM | Post-quantum secure |
 | L1 (Primitives) | VDF, VRF, Commitment | Proven security |
 | L2 (Consensus) | DAG, BFT, VDF Finality | Formal guarantees |
@@ -353,135 +348,41 @@ Montana inherits guarantees from all ATC layers:
 
 ---
 
-## 4. Montana Layer 0: Atomic Time
+## 4. Montana Layer 0: Sequential Computation
 
-*Maps to ATC L-1.2 (Atomic Time Reproducibility) and ATC L-1.5 (Terrestrial Time Uniformity)*
+*Maps to ATC L-1 (Physical Constraints)*
 
-Montana's Layer 0 provides the physical time foundation. All atomic clocks of a given isotope exhibit identical transition frequencies (ATC L-1.2), enabling consensus on time without cryptographic trust.
+Montana's Layer 0 provides the physical foundation for time verification. Time is sequential — each moment depends on the previous. This sequentiality is the basis for VDF security.
 
-### 4.1 Time Sources
-
-```python
-NTP_TOTAL_SOURCES: int = 34
-NTP_MIN_SOURCES_CONSENSUS: int = 18      # >50% required
-NTP_MIN_SOURCES_CONTINENT: int = 2       # Per inhabited continent
-NTP_MIN_SOURCES_POLE: int = 1            # Per polar region
-NTP_MIN_REGIONS_TOTAL: int = 5           # Minimum distinct regions
-```
-
-### 4.2 Region Configuration
+### 4.1 Sequentiality Assumption
 
 ```python
-REGIONS = {
-    "EUROPE": {
-        "id": 0x01,
-        "sources": [
-            ("PTB", "ptbtime1.ptb.de", "Germany"),
-            ("NPL", "ntp1.npl.co.uk", "UK"),
-            ("LNE-SYRTE", "ntp.obspm.fr", "France"),
-            ("METAS", "ntp.metas.ch", "Switzerland"),
-            ("INRIM", "ntp1.inrim.it", "Italy"),
-            ("VSL", "ntp.vsl.nl", "Netherlands"),
-            ("ROA", "ntp.roa.es", "Spain"),
-            ("GUM", "tempus1.gum.gov.pl", "Poland"),
-        ]
-    },
-    "ASIA": {
-        "id": 0x02,
-        "sources": [
-            ("NICT", "ntp.nict.jp", "Japan"),
-            ("NIM", "ntp.nim.ac.cn", "China"),
-            ("KRISS", "time.kriss.re.kr", "South Korea"),
-            ("NPLI", "time.nplindia.org", "India"),
-            ("VNIIFTRI", "ntp2.vniiftri.ru", "Russia"),
-            ("TL", "time.stdtime.gov.tw", "Taiwan"),
-            ("INPL", "ntp.inpl.gov.il", "Israel"),
-        ]
-    },
-    "NORTH_AMERICA": {
-        "id": 0x03,
-        "sources": [
-            ("NIST", "time.nist.gov", "USA"),
-            ("USNO", "tock.usno.navy.mil", "USA"),
-            ("NRC", "time.nrc.ca", "Canada"),
-            ("CENAM", "ntp.cenam.mx", "Mexico"),
-        ]
-    },
-    "SOUTH_AMERICA": {
-        "id": 0x04,
-        "sources": [
-            ("INMETRO", "ntp.inmetro.gov.br", "Brazil"),
-            ("INTI", "ntp.inti.gob.ar", "Argentina"),
-            ("INN", "ntp.inn.cl", "Chile"),
-        ]
-    },
-    "AFRICA": {
-        "id": 0x05,
-        "sources": [
-            ("NMISA", "ntp.nmisa.org", "South Africa"),
-            ("NIS", "ntp.nis.sci.eg", "Egypt"),
-            ("KEBS", "ntp.kebs.org", "Kenya"),
-        ]
-    },
-    "OCEANIA": {
-        "id": 0x06,
-        "sources": [
-            ("NMI", "time.nmi.gov.au", "Australia"),
-            ("MSL", "ntp.measurement.govt.nz", "New Zealand"),
-            ("NMC", "ntp.nmc.a-star.edu.sg", "Singapore"),
-        ]
-    },
-    "ANTARCTICA": {
-        "id": 0x07,
-        "sources": [
-            ("McMurdo", "ntp.mcmurdo.usap.gov", "Ross Island"),
-            ("Amundsen-Scott", "ntp.southpole.usap.gov", "South Pole"),
-            ("Concordia", "ntp.concordia.ipev.fr", "Dome C"),
-        ]
-    },
-    "ARCTIC": {
-        "id": 0x08,
-        "sources": [
-            ("Ny-Alesund", "ntp.npolar.no", "Svalbard"),
-            ("Thule", "ntp.thule.mil", "Greenland"),
-            ("Alert", "ntp.alert.forces.gc.ca", "Nunavut"),
-        ]
-    }
-}
+# Core assumption: SHAKE256 iteration is sequential
+# No algorithm computes H^T(x) faster than T sequential evaluations
+# This is an empirical assumption (Type C), not proven theorem
+
+VDF_SEQUENTIALITY_ASSUMPTION = """
+For SHAKE256 as H:
+  H^T(x) = H(H(H(...H(x)...)))  # T iterations
+
+  No known algorithm computes H^T(x) without computing H^(T-1)(x) first.
+  This follows from SHAKE256 behaving as a random oracle for iteration.
+"""
 ```
 
-### 4.3 Time Query Protocol
+### 4.2 Physical Bound
 
-```python
-NTP_QUERY_TIMEOUT_MS: int = 2000
-NTP_MAX_DRIFT_MS: int = 1000
-NTP_RETRY_COUNT: int = 3
-NTP_QUERY_INTERVAL_SEC: int = 60
+The VDF sequentiality property derives from:
+- **No iteration shortcut:** SHAKE256 has no known algebraic structure enabling shortcuts
+- **Sponge construction:** Keccak's sponge mixes state thoroughly each iteration
+- **10+ years analysis:** No successful attacks on SHAKE256 iteration
 
-@dataclass
-class AtomicTimeProof:
-    timestamp_ms: int           # Consensus timestamp
-    source_bitmap: int          # u64 - Which sources responded
-    source_count: int           # u8 - Number of agreeing sources
-    region_bitmap: int          # u8 - Which regions covered
-    max_drift_ms: int           # u16 - Maximum observed drift
+### 4.3 Security Degradation
 
-    def serialize(self) -> bytes:
-        writer = ByteWriter()
-        writer.write_u64(self.timestamp_ms)
-        writer.write_u64(self.source_bitmap)
-        writer.write_u8(self.source_count)
-        writer.write_u8(self.region_bitmap)
-        writer.write_u16(self.max_drift_ms)
-        return writer.to_bytes()
-
-    def is_valid(self) -> bool:
-        return (
-            self.source_count >= NTP_MIN_SOURCES_CONSENSUS and
-            bin(self.region_bitmap).count('1') >= NTP_MIN_REGIONS_TOTAL and
-            self.max_drift_ms <= NTP_MAX_DRIFT_MS
-        )
-```
+If VDF sequentiality is broken:
+- Finality guarantees degrade to the broken primitive's security
+- Hardware speedups provide constant factor only (not asymptotic)
+- System degrades gracefully — attack cost remains non-zero time
 
 ---
 
@@ -609,90 +510,167 @@ def verify_stark_proof(
 
 ---
 
-## 6. Montana Layer 2: Accumulated Finality
+## 6. Montana Layer 2: UTC Finality
 
-*Maps to ATC L-2.6.3 (VDF-Based Finality)*
+*Maps to ATC L-2.6.3 (Time-Based Finality)*
 
-Montana's Layer 2 achieves finality through **accumulated VDF depth**. This provides self-sovereign finality based entirely on physics.
+Montana's Layer 2 achieves finality through **UTC time boundaries** — deterministic points in time when blocks become final. This provides self-sovereign finality based entirely on physics: time itself.
 
 ### 6.1 Finality Model
 
 ```python
-# Finality through accumulated VDF checkpoints
-VDF_CHECKPOINT_TIME_SEC: float = 2.5     # Time per VDF checkpoint
-FINALITY_SOFT_CHECKPOINTS: int = 1       # ~2.5 seconds
-FINALITY_MEDIUM_CHECKPOINTS: int = 100   # ~4 minutes
-FINALITY_HARD_CHECKPOINTS: int = 1000    # ~40 minutes
+# UTC-based finality (v3.2)
+TIME_TOLERANCE_SEC: int = 1              # ±1 second UTC tolerance between nodes
+FINALITY_INTERVAL_SEC: int = 60          # 1 minute — finality boundary interval
+
+# Finality levels (UTC boundaries passed)
+FINALITY_SOFT_BOUNDARIES: int = 1        # 1 minute
+FINALITY_MEDIUM_BOUNDARIES: int = 2      # 2 minutes
+FINALITY_HARD_BOUNDARIES: int = 3        # 3 minutes
 ```
 
-### 6.2 Security Properties
+### 6.2 UTC Finality Boundaries
 
-**Attack cost:** To rewrite N VDF checkpoints requires N × VDF_CHECKPOINT_TIME_SEC of sequential computation.
+```
+UTC:     00:00  00:01  00:02  00:03  00:04  00:05  ...
+           │      │      │      │      │      │
+           ▼      ▼      ▼      ▼      ▼      ▼
+        ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐
+        │ F0 │ │ F1 │ │ F2 │ │ F3 │ │ F4 │ │ F5 │
+        └────┘ └────┘ └────┘ └────┘ └────┘ └────┘
+           │      │
+           │      └─ Finalizes blocks 00:00:00 - 00:00:59
+           │
+           └─ Genesis finality
+
+Finality occurs at fixed UTC boundaries: every minute (XX:XX:00)
+```
+
+### 6.3 Security Properties
+
+**Attack cost:** Cannot advance UTC. Time is universal.
 
 ```python
-def attack_cost_seconds(depth: int) -> float:
+def get_finality_boundary(timestamp_ms: int) -> int:
     """
-    Calculate minimum time to rewrite history at given depth.
+    Get the next finality boundary for a given timestamp.
 
-    This is a PHYSICAL BOUND - cannot be reduced by:
-    - More hardware (VDF is sequential)
+    Boundaries are at 1-minute UTC intervals.
+    """
+    interval_ms = FINALITY_INTERVAL_SEC * 1000
+    return ((timestamp_ms // interval_ms) + 1) * interval_ms
+
+def get_finality_level(block_timestamp_ms: int, current_time_ms: int) -> str:
+    """
+    Determine finality level based on UTC boundaries passed.
+
+    This is a PHYSICAL BOUND - cannot be accelerated by:
+    - Faster hardware (cannot advance UTC)
     - More money (time cannot be purchased)
     - Any optimization (physics constraint)
     """
-    return depth * VDF_CHECKPOINT_TIME_SEC
+    block_boundary = get_finality_boundary(block_timestamp_ms)
+    boundaries_passed = (current_time_ms - block_boundary) // (FINALITY_INTERVAL_SEC * 1000)
 
-# Examples:
-# Soft finality (1 checkpoint): 2.5 seconds to attack
-# Medium finality (100 checkpoints): 250 seconds (~4 min) to attack
-# Hard finality (1000 checkpoints): 2500 seconds (~40 min) to attack
+    if boundaries_passed >= FINALITY_HARD_BOUNDARIES:
+        return "hard"      # 3+ minutes
+    elif boundaries_passed >= FINALITY_MEDIUM_BOUNDARIES:
+        return "medium"    # 2+ minutes
+    elif boundaries_passed >= FINALITY_SOFT_BOUNDARIES:
+        return "soft"      # 1+ minute
+    else:
+        return "pending"
+
+# ASIC Resistance:
+# - Old model: ASIC computes VDF 40x faster → 40x advantage
+# - UTC model: ASIC computes faster but waits for UTC → NO advantage
 ```
 
-### 6.3 Finality Reference Structure
+### 6.4 Time Consensus
+
+```python
+# Time source: system UTC on each node
+# No external NTP servers required
+# Tolerance: ±1 second between nodes
+
+def is_timestamp_valid(timestamp_ms: int, local_time_ms: int) -> bool:
+    """
+    Validate timestamp against local UTC.
+
+    Accepts timestamps within ±1 second of local time.
+    """
+    tolerance_ms = TIME_TOLERANCE_SEC * 1000
+    return abs(timestamp_ms - local_time_ms) <= tolerance_ms
+```
+
+### 6.5 VDF Role in UTC Model
+
+VDF proves participation in a finality window — not computation speed:
+
+```python
+def can_participate_in_finality(
+    vdf_completion_time_ms: int,
+    finality_boundary_ms: int
+) -> bool:
+    """
+    Check if VDF completed before finality boundary.
+
+    Fast hardware: completes early, waits for boundary
+    Slow hardware: must complete before boundary or miss window
+    """
+    return vdf_completion_time_ms <= finality_boundary_ms
+
+# Example:
+# Finality boundary: 00:01:00 UTC
+# Node A (ASIC):  VDF ready 00:00:12 → waits → participates
+# Node B (fast):  VDF ready 00:00:25 → waits → participates
+# Node C (slow):  VDF ready 00:00:55 → participates
+# Node D (too slow): VDF ready 00:01:02 → MISSES window → next boundary
+```
+
+### 6.6 Finality Checkpoint Structure
 
 ```python
 @dataclass
-class FinalityReference:
-    """Reference to accumulated VDF finality state."""
-    depth: int                  # u64 - VDF checkpoint depth
-    vdf_root: bytes             # 32 bytes - Accumulated VDF chain tip
-    timestamp_ms: int           # u64 - Timestamp of this finality point
+class FinalityCheckpoint:
+    """Finality checkpoint at UTC boundary."""
+    boundary_timestamp_ms: int      # u64 - UTC boundary (e.g., 00:10:00)
+    blocks_merkle_root: bytes       # 32 bytes - Merkle root of blocks in window
+    vdf_proofs_root: bytes          # 32 bytes - Merkle root of VDF proofs
+    participants_count: int         # u32 - Number of participating nodes
+    previous_checkpoint: bytes      # 32 bytes - Hash of previous checkpoint
 
-    SIZE: int = 48  # bytes
+    SIZE: int = 112  # bytes
 
     def serialize(self) -> bytes:
         writer = ByteWriter()
-        writer.write_u64(self.depth)
-        writer.write_raw(self.vdf_root)
-        writer.write_u64(self.timestamp_ms)
+        writer.write_u64(self.boundary_timestamp_ms)
+        writer.write_raw(self.blocks_merkle_root)
+        writer.write_raw(self.vdf_proofs_root)
+        writer.write_u32(self.participants_count)
+        writer.write_raw(self.previous_checkpoint)
         return writer.to_bytes()
 
-    def finality_level(self) -> str:
-        if self.depth >= FINALITY_HARD_CHECKPOINTS:
-            return "hard"
-        elif self.depth >= FINALITY_MEDIUM_CHECKPOINTS:
-            return "medium"
-        elif self.depth >= FINALITY_SOFT_CHECKPOINTS:
-            return "soft"
-        else:
-            return "unconfirmed"
+    def checkpoint_hash(self) -> bytes:
+        return sha3_256(self.serialize())
 ```
 
-### 6.4 Fork Choice Rule
+### 6.7 Fork Choice Rule
 
 ```python
 def select_best_chain(chains: List[Chain]) -> Chain:
     """
-    Fork choice: chain with greater accumulated VDF depth.
+    Fork choice: chain with more finality checkpoints.
 
     Ties broken by:
-    1. Greater VDF depth (more sequential work)
-    2. Earlier timestamp (if same depth)
-    3. Lower hash (deterministic tiebreaker)
+    1. More finality checkpoints (more UTC boundaries)
+    2. More participants in latest checkpoint
+    3. Lower checkpoint hash (deterministic tiebreaker)
     """
     return max(chains, key=lambda c: (
-        c.accumulated_vdf_depth,
-        -c.tip_timestamp,
-        -int.from_bytes(c.tip_hash, 'big')
+        c.finality_checkpoint_count,
+        c.latest_checkpoint.participants_count,
+        -int.from_bytes(c.latest_checkpoint.checkpoint_hash(), 'big')
     ))
 ```
 
@@ -710,11 +688,8 @@ class Heartbeat:
     # Identity
     pubkey: PublicKey               # 33 bytes
 
-    # Layer 0: Physical Time
-    atomic_time: AtomicTimeProof    # Variable
-
-    # Layer 1: Temporal Proof
-    vdf_proof: VDFProof             # Variable
+    # Layer 0-1: Temporal Proof
+    vdf_proof: VDFProof             # Variable (proves elapsed time)
 
     # Layer 2: Finality Reference
     finality_ref: FinalityReference # 48 bytes
@@ -728,12 +703,6 @@ class Heartbeat:
 
     def heartbeat_id(self) -> Hash:
         return sha3_256(self.serialize_for_signing())
-
-    def is_cross_layer_consistent(self) -> bool:
-        """Atomic time must be consistent with VDF progression."""
-        expected_time = self.finality_ref.timestamp_ms
-        diff = abs(self.atomic_time.timestamp_ms - expected_time)
-        return diff <= 60_000  # 1 minute tolerance
 ```
 
 ### 7.2 Heartbeat Validation
@@ -747,15 +716,11 @@ def validate_heartbeat(hb: Heartbeat, state: GlobalState) -> bool:
     if not verify_sphincs(hb.pubkey, hb.serialize_for_signing(), hb.signature):
         return False
 
-    # 2. Verify atomic time proof
-    if not hb.atomic_time.is_valid():
-        return False
-
-    # 3. Verify VDF proof
+    # 2. Verify VDF proof (Layer 0-1)
     if not verify_stark_proof(hb.vdf_proof):
         return False
 
-    # 4. Verify finality reference
+    # 3. Verify finality reference
     if hb.finality_ref.depth < state.min_finality_depth:
         return False
 
@@ -975,7 +940,7 @@ def get_block_start_time(block_number: int) -> int:
 
 **Transaction Flow:**
 
-1. User submits transaction with `timestamp_ms` from atomic time
+1. User submits transaction with `timestamp_ms`
 2. Transaction enters mempool, propagates to network
 3. VDF checkpoint every 1 second provides ordering
 4. DAG-PHANTOM determines deterministic order across nodes
@@ -1070,8 +1035,8 @@ class Transaction:
     amount: int                     # u64
 
     # Layer 0
-    atomic_timestamp_ms: int        # u64
-    atomic_source_bitmap: int       # u8
+    timestamp_ms: int               # u64
+    source_bitmap: int              # u8 (reserved)
 
     # Layer 2
     finality_depth: int             # u64 - Reference finality depth
@@ -1581,7 +1546,7 @@ BOOTSTRAP_NODES = [
         port=19656,
         pubkey="GENESIS_NODE_PUBKEY_PLACEHOLDER",  # Set at mainnet launch
         region="EU",
-        services=SERVICE_FULL_NODE | SERVICE_VDF | SERVICE_NTP,
+        services=SERVICE_FULL_NODE | SERVICE_VDF,
     ),
 ]
 
@@ -1589,7 +1554,6 @@ BOOTSTRAP_NODES = [
 SERVICE_FULL_NODE: int = 0x01      # Full blockchain history
 SERVICE_LIGHT_NODE: int = 0x02     # Light node
 SERVICE_VDF: int = 0x04            # Computes VDF proofs
-SERVICE_NTP: int = 0x08            # Queries atomic time
 SERVICE_RELAY: int = 0x10          # Relays transactions
 
 @dataclass
@@ -1830,7 +1794,7 @@ async def perform_handshake(
         node_type=local_state.node_type,
         services=local_state.services,
         user_agent=f"Montana/{VERSION_STRING}",
-        timestamp_ms=get_atomic_time_ms(),
+        timestamp_ms=get_current_time_ms(),
         best_height=local_state.chain_height,
         best_hash=local_state.chain_tip_hash,
         vdf_depth=local_state.accumulated_vdf_depth,
@@ -1897,7 +1861,7 @@ def validate_hello(hello: HelloMessage, state: NodeState) -> Tuple[int, str]:
         return RejectCode.NETWORK_MISMATCH, "Wrong network"
 
     # Time drift
-    local_time = get_atomic_time_ms()
+    local_time = get_current_time_ms()
     drift_sec = abs(hello.timestamp_ms - local_time) / 1000
     if drift_sec > HELLO_MAX_TIME_DRIFT_SEC:
         return RejectCode.TIME_DRIFT, f"Time drift {drift_sec}s > {HELLO_MAX_TIME_DRIFT_SEC}s"
@@ -2371,7 +2335,7 @@ class Penalty(IntEnum):
 
     # Heartbeat violations
     INVALID_HEARTBEAT = 20
-    INVALID_ATOMIC_TIME = 30
+    INVALID_TIMESTAMP = 30
 
     # DoS attempts
     ADDR_FLOOD = 20
@@ -2742,7 +2706,7 @@ TOTAL_ERAS = 33
 # ==============================================================================
 # NODE TYPES (2 types only)
 # ==============================================================================
-NODE_TYPE_FULL = 1              # Full Node: Full history + VDF + NTP
+NODE_TYPE_FULL = 1              # Full Node: Full history + VDF
 NODE_TYPE_LIGHT = 2             # Light Node: History from connection only
 NODE_TYPES_TOTAL = 2            # Exactly 2 node types in protocol
 
@@ -2765,16 +2729,7 @@ TIER_3_WEIGHT = 0.10            # 10% → TG Community users
 # Tier 3 (TG Users):   10%
 
 # ==============================================================================
-# LAYER 0: ATOMIC TIME
-# ==============================================================================
-NTP_TOTAL_SOURCES = 34
-NTP_MIN_SOURCES_CONSENSUS = 18
-NTP_MIN_SOURCES_CONTINENT = 2
-NTP_QUERY_TIMEOUT_MS = 2000
-NTP_MAX_DRIFT_MS = 1000
-
-# ==============================================================================
-# LAYER 1: VDF
+# LAYER 0-1: VDF (SEQUENTIAL COMPUTATION)
 # ==============================================================================
 VDF_HASH_FUNCTION = "SHAKE256"
 VDF_BASE_ITERATIONS = 16777216
@@ -3718,7 +3673,7 @@ TOTAL_ERAS = 33
 # ==============================================================================
 # NODE TYPES (2 types only)
 # ==============================================================================
-NODE_TYPE_FULL = 1              # Full Node: Full history + VDF + NTP
+NODE_TYPE_FULL = 1              # Full Node: Full history + VDF
 NODE_TYPE_LIGHT = 2             # Light Node: History from connection only
 NODE_TYPES_TOTAL = 2            # Exactly 2 node types in protocol
 
@@ -3741,17 +3696,7 @@ TIER_3_WEIGHT = 0.10            # 10% → TG Community users
 # Tier 3 (TG Users):   10%
 
 # ==============================================================================
-# LAYER 0: ATOMIC TIME
-# ==============================================================================
-NTP_TOTAL_SOURCES = 34
-NTP_MIN_SOURCES_CONSENSUS = 18
-NTP_MIN_SOURCES_CONTINENT = 2
-NTP_MIN_REGIONS_TOTAL = 5
-NTP_QUERY_TIMEOUT_MS = 2000
-NTP_MAX_DRIFT_MS = 1000
-
-# ==============================================================================
-# LAYER 1: VDF
+# LAYER 0-1: VDF (SEQUENTIAL COMPUTATION)
 # ==============================================================================
 VDF_HASH_FUNCTION = "SHAKE256"
 VDF_OUTPUT_BYTES = 32

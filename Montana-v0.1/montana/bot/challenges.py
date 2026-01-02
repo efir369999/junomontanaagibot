@@ -20,7 +20,6 @@ from montana.constants import (
     MAX_CHALLENGE_ATTEMPTS,
 )
 from montana.core.types import Hash
-from montana.core.atomic_time import AtomicTimeSynchronizer as AtomicTimeSource
 
 import logging
 logger = logging.getLogger(__name__)
@@ -130,9 +129,7 @@ class ChallengeManager:
 
     def __init__(
         self,
-        atomic_time: Optional[AtomicTimeSource] = None,
     ):
-        self.atomic_time = atomic_time or AtomicTimeSource()
 
         # Active challenges
         self._challenges: Dict[str, TimeChallenge] = {}
@@ -161,8 +158,8 @@ class ChallengeManager:
         """
         challenge_id = secrets.token_hex(16)
 
-        # Get expected answer (current atomic time)
-        expected_time_ms = int(self.atomic_time.get_atomic_time() * 1000)
+        # Expected answer: current UTC time in milliseconds
+        expected_time_ms = int(time.time() * 1000)
 
         challenge = TimeChallenge(
             challenge_id=challenge_id,

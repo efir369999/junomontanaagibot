@@ -20,7 +20,6 @@ from montana.constants import (
     SERVICE_FULL_NODE,
     SERVICE_LIGHT_NODE,
     SERVICE_VDF,
-    SERVICE_NTP,
     SERVICE_RELAY,
 )
 
@@ -101,13 +100,11 @@ class ServiceFlags:
     FULL_NODE = SERVICE_FULL_NODE
     LIGHT_NODE = SERVICE_LIGHT_NODE
     VDF = SERVICE_VDF
-    NTP = SERVICE_NTP
     RELAY = SERVICE_RELAY
 
     # Aliases
     NODE_NETWORK = FULL_NODE
     NODE_VDF = VDF
-    NODE_NTP = NTP
 
     @classmethod
     def has_flag(cls, services: int, flag: int) -> bool:
@@ -124,8 +121,6 @@ class ServiceFlags:
             flags.append("LIGHT_NODE")
         if cls.has_flag(services, cls.VDF):
             flags.append("VDF")
-        if cls.has_flag(services, cls.NTP):
-            flags.append("NTP")
         if cls.has_flag(services, cls.RELAY):
             flags.append("RELAY")
         return flags

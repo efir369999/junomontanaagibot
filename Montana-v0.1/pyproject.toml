@@ -30,7 +30,6 @@ dependencies = [
     "cryptography>=41.0.0",
     "aiohttp>=3.9.0",
     "websockets>=12.0",
-    "ntplib>=0.4.0",
     "lmdb>=1.4.0",
 ]
 

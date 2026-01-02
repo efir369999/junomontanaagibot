@@ -9,9 +9,6 @@ cryptography>=41.0.0     # General cryptographic primitives
 aiohttp>=3.9.0           # Async HTTP client/server
 websockets>=12.0         # WebSocket support
 
-# Time synchronization
-ntplib>=0.4.0            # NTP client for atomic time
-
 # Storage
 lmdb>=1.4.0              # Lightning Memory-Mapped Database
 

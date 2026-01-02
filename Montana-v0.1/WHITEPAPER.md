@@ -1,6 +1,6 @@
 # Ɉ Montana
 
-**Version:** 3.1
+**Version:** 3.2
 **Date:** January 2026
 **Ticker:** $MONT
 
@@ -23,7 +23,7 @@ lim(evidence → ∞) 1 Ɉ → 1 second
 
 Montana builds trust in time value through the **Asymptotic Trust Consensus** (ATC) architecture — physical constraints, computational hardness, protocol primitives, and consensus mechanisms.
 
-**Montana v3.0** is fully self-sovereign: no external blockchain dependencies. Finality derives entirely from physics — accumulated VDF computation that cannot be accelerated beyond physical limits.
+**Montana v3.2** is fully self-sovereign: no external blockchain dependencies, no external time sources. Finality is determined by UTC boundaries — time itself becomes the consensus mechanism.
 
 The more evidence accumulates, the closer Ɉ approaches its definition. We never claim to arrive; we asymptotically approach.
 
@@ -66,8 +66,8 @@ Montana answers one question:
 > **"Can we verify that one second has passed?"**
 
 Yes — through:
-1. **Atomic clocks** (34 sources, 8 regions)
-2. **VDF computation** (sequential, non-parallelizable)
+1. **UTC boundaries** (universal time reference)
+2. **VDF computation** (proof of participation in time window)
 3. **Accumulated finality** (physics-based irreversibility)
 
 ---
@@ -94,75 +94,75 @@ An adversary operating within known physics **cannot**:
 - Create time (conservation)
 - Signal faster than light (relativity)
 - Compute without energy (Landauer)
-- **Accelerate VDF beyond sequential limit** (parallelization impossible)
+- **Advance UTC** (time is universal)
 
 The TTU's integrity degrades only if physics requires revision at protocol-relevant scales.
 
 ### 2.3 Self-Sovereign Finality
 
-Montana achieves finality through **accumulated VDF** — sequential computation that proves elapsed time.
+Montana achieves finality through **UTC time boundaries** — deterministic points in time when blocks become final.
 
 | Property | Guarantee |
 |----------|-----------|
-| Security basis | Physical (time is sequential) |
-| Attack cost | Rewriting N seconds requires N seconds |
+| Security basis | Physical (UTC is universal) |
+| Attack cost | Cannot advance time |
 | Dependencies | None (physics only) |
 | Trust model | Physics |
 
-**To rewrite N seconds of Montana history requires N seconds of real time.**
-
-This is a **physical law**.
+**No hardware advantage can advance UTC. Time passes equally for all.**
 
 ---
 
-## 3. Verification
+## 3. UTC Finality Model
 
-Montana verifies each Temporal Time Unit through three layers:
+Montana uses UTC time boundaries for deterministic finality. No external time sources required — nodes use system UTC with ±1 second tolerance.
 
-### 3.1 Atomic Time Consensus
-
-```
-34 NTP servers across 8 geographic regions
-├─ Europe: 8 sources (PTB, NPL, SYRTE, METAS, INRIM, VSL, ROA, GUM)
-├─ Asia: 7 sources (NICT, NIM, KRISS, NPLI, VNIIFTRI, TL, INPL)
-├─ North America: 4 sources (NIST, USNO, NRC, CENAM)
-├─ South America: 3 sources (INMETRO, INTI, INN)
-├─ Africa: 3 sources (NMISA, NIS, KEBS)
-├─ Oceania: 3 sources (NMI, MSL, NMC)
-├─ Antarctica: 3 sources (McMurdo, Amundsen-Scott, Concordia)
-└─ Arctic: 3 sources (Ny-Ålesund, Thule, Alert)
-
-Consensus: >50% (18+) must agree within 1 second
-Geographic: Minimum 5 regions required
-```
-
-**Why this works:** Atomic clocks of the same isotope exhibit identical transition frequencies — this is quantum mechanics, not convention.
-
-### 3.2 VDF Temporal Proof
+### 3.1 Finality Boundaries
 
 ```
-VDF(input, T) = SHAKE256^T(input)
-
-T = 2²⁴ iterations (~2.5 seconds)
+UTC:     00:00  00:01  00:02  00:03  00:04  00:05  ...
+           │      │      │      │      │      │
+           ▼      ▼      ▼      ▼      ▼      ▼
+        ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐
+        │ F0 │ │ F1 │ │ F2 │ │ F3 │ │ F4 │ │ F5 │
+        └────┘ └────┘ └────┘ └────┘ └────┘ └────┘
+           │      │
+           │      └─ Finalizes blocks 00:00:00 - 00:00:59
+           │
+           └─ Genesis finality
 ```
 
-**Verifiable Delay Function** proves elapsed time through sequential computation:
-- Cannot be parallelized
-- Cannot be accelerated beyond physics
-- Verified quickly (STARK proofs)
+Finality occurs every **1 minute** at UTC boundaries: 00:00, 00:01, 00:02, etc.
 
-### 3.3 Accumulated Finality
+### 3.2 Time Consensus
 
 ```
-Accumulated VDF depth:
-├─ Soft: 1 VDF checkpoint (~2.5 seconds)
-├─ Medium: 100 VDF checkpoints (~4 minutes)
-└─ Hard: 1000 VDF checkpoints (~40 minutes)
+Time source:        UTC on each node (system clock)
+Tolerance:          ±1 second
+External sources:   None required
 ```
 
-**Provides immutable temporal ordering through physics, not external trust.**
+Nodes accept blocks and heartbeats within ±1 second of their local UTC. This tolerance accommodates minor clock drift without requiring external synchronization.
 
-To rewrite history at depth D requires D × VDF_time of sequential computation. No parallelization possible.
+### 3.3 VDF Role
+
+VDF proves participation in a time window — not computation speed:
+
+```
+Node A (fast hardware):   VDF ready at 00:00:25 → waits → participates in F1
+Node B (slow hardware):   VDF ready at 00:00:55 → participates in F1
+Node C (too slow):        VDF ready at 00:01:02 → misses F1 → participates in F2
+```
+
+**Hardware advantage eliminated.** Fast hardware waits for UTC boundary like everyone else.
+
+### 3.4 ASIC Resistance
+
+| Scenario | Old Model (VDF depth) | UTC Model |
+|----------|----------------------|-----------|
+| ASIC vs CPU | 40x advantage | No advantage |
+| Finality time | Variable (hardware-dependent) | Fixed (1 min UTC) |
+| Attack vector | Faster VDF = more depth | None (cannot advance UTC) |
 
 ---
 
@@ -170,32 +170,45 @@ To rewrite history at depth D requires D × VDF_time of sequential computation. 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  HARD FINALITY (40+ minutes)                                    │
-│  Accumulated VDF: 1000+ sequential checkpoints                  │
-│  Attack cost: 40+ minutes of real time (physical impossibility) │
+│  HARD FINALITY (3 minutes)                                      │
+│  3 UTC boundaries passed                                        │
+│  Attack cost: Cannot reverse UTC                                │
 └─────────────────────────────────────────────────────────────────┘
                               ↑
 ┌─────────────────────────────────────────────────────────────────┐
-│  MEDIUM FINALITY (minutes)                                      │
-│  DAG consensus converges + 100 VDF checkpoints                  │
-│  Probabilistic certainty                                        │
+│  MEDIUM FINALITY (2 minutes)                                    │
+│  2 UTC boundaries passed                                        │
+│  High certainty                                                 │
 └─────────────────────────────────────────────────────────────────┘
                               ↑
 ┌─────────────────────────────────────────────────────────────────┐
-│  SOFT FINALITY (seconds)                                        │
-│  VDF checkpoint                                                 │
-│  Physical guarantee: time is irreversible                       │
+│  SOFT FINALITY (1 minute)                                       │
+│  1 UTC boundary passed                                          │
+│  Block included in finality checkpoint                          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### 4.1 Finality Properties
 
-| Property | Accumulated VDF |
-|----------|-----------------|
-| Security | Physical (sequential computation) |
-| Attack cost | Time itself (irreducible) |
+| Property | UTC Finality |
+|----------|--------------|
+| Security | Physical (UTC is universal) |
+| Attack cost | Impossible (cannot advance time) |
 | Dependencies | None |
-| Latency | Configurable (seconds to hours) |
+| Latency | Deterministic (1/2/3 minutes) |
+
+### 4.2 Finality Checkpoint Structure
+
+Each finality checkpoint (every 1 minute) contains:
+
+```
+Finality Checkpoint:
+├─ UTC timestamp (boundary time)
+├─ Merkle root of all blocks in window
+├─ VDF proofs from participating nodes
+├─ Aggregate signatures (SPHINCS+)
+└─ Previous checkpoint hash
+```
 
 ---
 
@@ -255,15 +268,17 @@ All TTUs distributed through participation. No one starts with an advantage.
 
 ### 6.3 Heartbeat
 
-A **heartbeat** proves temporal presence:
+A **heartbeat** proves temporal presence within a finality window:
 
 ```
 Full Heartbeat (Tier 1):       Light Heartbeat (Tier 2/3):
-├─ Atomic time proof (34 NTP)  ├─ Timestamp (verified)
-├─ VDF proof                   ├─ Source (LIGHT_NODE/TG_BOT/TG_USER)
-├─ Finality reference          ├─ Community ID
-└─ SPHINCS+ signature          └─ SPHINCS+ signature
+├─ VDF proof                   ├─ Timestamp (verified)
+├─ Finality window reference   ├─ Source (LIGHT_NODE/TG_BOT/TG_USER)
+└─ SPHINCS+ signature          ├─ Community ID
+                               └─ SPHINCS+ signature
 ```
+
+Heartbeats must arrive before UTC boundary to be included in finality checkpoint.
 
 ### 6.4 Score
 
@@ -285,7 +300,19 @@ Square root provides diminishing returns and Sybil resistance.
 | Key Exchange | ML-KEM-768 | NIST FIPS 203 |
 | Hashing | SHA3-256, SHAKE256 | NIST FIPS 202 |
 
-### 7.2 DAG Structure
+### 7.2 VDF Parameters
+
+```
+VDF(input, T) = SHAKE256^T(input)
+
+T = 2²⁴ iterations
+Purpose: Proof of participation (not speed competition)
+Verification: STARK proofs (O(log T))
+```
+
+VDF must complete before UTC boundary. Hardware that completes faster simply waits.
+
+### 7.3 DAG Structure
 
 ```
     ┌─[B1]─┐
@@ -297,7 +324,7 @@ Square root provides diminishing returns and Sybil resistance.
 
 No wasted work. All valid blocks included.
 
-### 7.3 Privacy (Optional)
+### 7.4 Privacy (Optional)
 
 | Tier | Visibility |
 |------|------------|
@@ -341,7 +368,7 @@ Every claim is typed. This is epistemic honesty.
 └─────────────────────────────────────────────────────────────────┘
                               ↑
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 2: Consensus (Safety, Liveness, Finality)                │
+│  Layer 2: Consensus (Safety, Liveness, UTC Finality)            │
 └─────────────────────────────────────────────────────────────────┘
                               ↑
 ┌─────────────────────────────────────────────────────────────────┐
@@ -353,11 +380,11 @@ Every claim is typed. This is epistemic honesty.
 └─────────────────────────────────────────────────────────────────┘
                               ↑
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer -1: Physics (Thermodynamics, Atomic Time, Light Speed)   │
+│  Layer -1: Physics (Thermodynamics, Sequentiality, Light Speed) │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Montana v3.0:** Fully self-sovereign. No external dependencies.
+**Montana v3.2:** Fully self-sovereign. No external dependencies.
 
 ---
 
@@ -414,15 +441,17 @@ TIER_1_WEIGHT = 0.70         # Full Node → 70%
 TIER_2_WEIGHT = 0.20         # Light Node / TG Bot owners → 20%
 TIER_3_WEIGHT = 0.10         # TG Community users → 10%
 
-# Verification
-NTP_SOURCES = 34
-NTP_REGIONS = 8
-VDF_ITERATIONS = 16_777_216
+# Time Consensus
+TIME_TOLERANCE_SEC = 1       # ±1 second UTC tolerance
+FINALITY_INTERVAL_SEC = 60   # 1 minute
 
-# Finality (VDF checkpoints)
-FINALITY_SOFT = 1           # ~2.5 seconds
-FINALITY_MEDIUM = 100       # ~4 minutes
-FINALITY_HARD = 1000        # ~40 minutes
+# VDF (proof of participation)
+VDF_ITERATIONS = 16_777_216  # 2^24
+
+# Finality (UTC boundaries)
+FINALITY_SOFT = 1            # 1 boundary (1 minute)
+FINALITY_MEDIUM = 2          # 2 boundaries (2 minutes)
+FINALITY_HARD = 3            # 3 boundaries (3 minutes)
 
 # Distribution
 PRE_ALLOCATION = 0

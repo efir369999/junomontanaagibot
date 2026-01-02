@@ -12,7 +12,7 @@ use winter_air::{
     Air, AirContext, Assertion, EvaluationFrame, ProofOptions, TraceInfo,
     TransitionConstraintDegree,
 };
-use winter_math::{fields::f128::BaseElement, FieldElement, StarkField};
+use winter_math::{fields::f128::BaseElement, FieldElement, StarkField, ToElements};
 
 // Field element type (128-bit prime field)
 pub type Felt = BaseElement;
@@ -57,6 +57,8 @@ impl VdfAir {
 impl Air for VdfAir {
     type BaseField = Felt;
     type PublicInputs = VdfPublicInputs;
+    type GkrProof = ();
+    type GkrVerifier = ();
 
     fn new(trace_info: TraceInfo, pub_inputs: Self::PublicInputs, options: ProofOptions) -> Self {
         let input_felt = bytes_to_felts(&pub_inputs.input_hash);
@@ -113,11 +115,6 @@ impl Air for VdfAir {
         }
     }
 
-    /// Get degrees of transition constraints
-    fn transition_constraint_degrees(&self) -> Vec<TransitionConstraintDegree> {
-        Self::get_transition_degrees()
-    }
-
     /// Define boundary constraints (assertions)
     ///
     /// We assert:
@@ -156,6 +153,25 @@ impl VdfPublicInputs {
             output_hash,
             iterations,
         }
+    }
+}
+
+impl ToElements<Felt> for VdfPublicInputs {
+    fn to_elements(&self) -> Vec<Felt> {
+        let mut elements = Vec::with_capacity(TRACE_WIDTH * 2 + 1);
+
+        // Add input hash as field elements
+        let input_felts = bytes_to_felts(&self.input_hash);
+        elements.extend_from_slice(&input_felts);
+
+        // Add output hash as field elements
+        let output_felts = bytes_to_felts(&self.output_hash);
+        elements.extend_from_slice(&output_felts);
+
+        // Add iterations
+        elements.push(Felt::from(self.iterations));
+
+        elements
     }
 }
 

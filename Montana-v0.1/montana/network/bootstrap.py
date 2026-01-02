@@ -42,7 +42,7 @@ OFFICIAL_BOOTSTRAP_NODES: List[BootstrapNode] = [
         ip="176.124.208.93",
         port=DEFAULT_PORT,
         region="EU",
-        services=ServiceFlags.NODE_NETWORK | ServiceFlags.NODE_VDF | ServiceFlags.NODE_NTP,
+        services=ServiceFlags.NODE_NETWORK | ServiceFlags.NODE_VDF,
     ),
 ]
 

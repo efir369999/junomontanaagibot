@@ -25,25 +25,22 @@ Montana relies on these L-1 physical constraints:
 | L-1 Constraint | Montana Usage | Montana Component |
 |----------------|---------------|-------------------|
 | **L-1.1** Thermodynamic Arrow | Irreversibility of VDF computation | VDF, Block finality |
-| **L-1.2** Atomic Time | 34 NTP sources from atomic standards | Layer 0: Atomic Time |
 | **L-1.3** Landauer Limit | Bounds adversary computation | Anti-spam PoW |
 | **L-1.4** Speed of Light | Minimum network propagation delay | Block timing (600s) |
-| **L-1.5** Time Uniformity | All nodes measure time consistently | Heartbeat validation |
-| **L-1.7** Thermal Noise | NTP_MAX_DRIFT_MS = 1000ms tolerance | Atomic time consensus |
+| **L-1.5** Time Uniformity | Sequential computation is universal | VDF consistency |
 
-### Montana Atomic Time → L-1.2
+### Montana VDF Sequentiality → L-1
 
 ```python
-# Montana requirement
-NTP_MIN_SOURCES_CONSENSUS = 18      # >50% of 34 sources
-NTP_MIN_REGIONS_TOTAL = 5           # Geographic diversity
+# Montana core assumption
+# SHAKE256 iteration is sequential - no algorithm computes
+# H^T(x) faster than T sequential evaluations
 
-# Maps to L-1.2: Atomic Time Reproducibility
-# "Isolated atoms of a given isotope exhibit identical transition frequencies"
-# Precision: Δf/f < 9.4 × 10⁻¹⁹ (²⁷Al⁺)
+# Maps to L-1: Physical constraint that time is sequential
+# Computation must happen step-by-step
 ```
 
-**Type:** Physical (Type 1 in L-1 classification)
+**Type:** Physical (Type P) + Empirical (Type C)
 
 ---
 
@@ -82,7 +79,7 @@ Montana uses these L1 primitives:
 | **L-1.1** VDF | SHAKE256 hash chain, T = 2²⁴ base | §5 |
 | **L-1.2** VRF | ECVRF for eligibility | §10 |
 | **L-1.3** Commitment | Pedersen (privacy), Hash (general) | §14 |
-| **L-1.4** Timestamp | Linked timestamps with atomic time | §7 |
+| **L-1.4** Timestamp | Linked timestamps with VDF chain | §7 |
 | **L-1.5** Ordering | DAG-PHANTOM | §10 |
 
 ### Montana VDF → L-1.1
@@ -195,7 +192,6 @@ Montana uses these L-2.7 composition patterns:
 
 | Montana Failure | L2 Failure Mode | Recovery |
 |-----------------|-----------------|----------|
-| NTP disagreement | L-2.8.3 Time source | Require supermajority |
 | Network partition | L-2.8.1 Partition | Wait for GST |
 | Byzantine nodes | L-2.8.2 Threshold | Bounded by f < n/3 |
 | VDF speedup | L-2.8.4 VDF speedup | Physical bound (impossible) |
@@ -206,7 +202,7 @@ Montana uses these L-2.7 composition patterns:
 
 | Montana Component | Primary Type | Notes |
 |-------------------|--------------|-------|
-| Atomic time consensus | Type 1 (L-1) | Physical measurement |
+| VDF sequentiality | Type P + C | Physical + empirical |
 | VDF computation | Type P + C | Physical + empirical |
 | Accumulated finality | Type P | Physical (sequential time) |
 | ECVRF eligibility | Type C | Pre-quantum empirical |
@@ -222,8 +218,7 @@ Montana v3.0 achieves self-sovereignty through:
 
 | Property | Mechanism | Dependency |
 |----------|-----------|------------|
-| Time measurement | Atomic clock consensus | Physics (L-1.2) |
-| Temporal proof | VDF sequential computation | Physics (L-1.1) |
+| Temporal proof | VDF sequential computation | Physics (L-1) |
 | Finality | Accumulated VDF depth | Physics (time is sequential) |
 | Fork choice | Greater accumulated VDF | Physics (time cannot fork) |
 
@@ -250,7 +245,7 @@ To verify Montana compliance with ATC:
 
 ```
 1. Physical constraints (L-1):
-   ✓ Uses atomic time sources
+   ✓ VDF sequential computation
    ✓ VDF respects Landauer bound
    ✓ No FTL assumptions
 

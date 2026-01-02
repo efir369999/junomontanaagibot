@@ -28,7 +28,6 @@ from montana.core.heartbeat import (
 )
 from montana.core.vdf import SHAKE256VDF as VDFComputer
 from montana.core.vdf_accumulator import VDFAccumulator, FinalityLevel
-from montana.core.atomic_time import AtomicTimeSynchronizer as AtomicTimeSource
 from montana.network.protocol import ServiceFlags, MessageType
 from montana.network.peer import PeerManager
 from montana.network.bootstrap import BootstrapManager
@@ -96,7 +95,6 @@ class FullNode:
         # VDF components
         self.vdf: Optional[VDFComputer] = None
         self.vdf_accumulator: Optional[VDFAccumulator] = None
-        self.atomic_time: Optional[AtomicTimeSource] = None
 
         # State
         self._running = False
@@ -115,8 +113,7 @@ class FullNode:
     def services(self) -> int:
         return (
             ServiceFlags.NODE_NETWORK |
-            ServiceFlags.NODE_VDF |
-            ServiceFlags.NODE_NTP
+            ServiceFlags.NODE_VDF
         )
 
     async def start(self):
@@ -152,7 +149,6 @@ class FullNode:
         # Initialize VDF
         self.vdf = VDFComputer()
         self.vdf_accumulator = VDFAccumulator()
-        self.atomic_time = AtomicTimeSource()
 
         # Initialize eligibility
         self.eligibility = BlockEligibility()

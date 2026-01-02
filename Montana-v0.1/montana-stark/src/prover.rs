@@ -6,14 +6,84 @@ use crate::types::{VdfError, VdfProof, VdfProofConfig};
 use crate::vdf_air::{Felt, VdfAir, VdfPublicInputs, TRACE_WIDTH};
 
 use sha3::{Shake256, digest::{Update, ExtendableOutput, XofReader}};
-use winter_air::{FieldExtension, ProofOptions};
+use winter_air::{FieldExtension, ProofOptions, TraceInfo};
 use winter_crypto::{hashers::Blake3_256, DefaultRandomCoin};
-use winter_math::FieldElement;
-use winterfell::TraceTable;
+use winter_math::{FieldElement, StarkField};
+use winterfell::{
+    AuxRandElements, ConstraintCompositionCoefficients,
+    DefaultConstraintEvaluator, DefaultTraceLde,
+    Prover, StarkDomain, Trace, TracePolyTable, TraceTable,
+    matrix::ColMatrix,
+};
 
 // Type aliases for STARK components
 type VdfHasher = Blake3_256<Felt>;
 type VdfRandomCoin = DefaultRandomCoin<VdfHasher>;
+
+/// VDF Prover implementation
+pub struct VdfProver {
+    options: ProofOptions,
+    iterations: u64,
+}
+
+impl VdfProver {
+    pub fn new(options: ProofOptions, iterations: u64) -> Self {
+        Self { options, iterations }
+    }
+}
+
+impl Prover for VdfProver {
+    type BaseField = Felt;
+    type Air = VdfAir;
+    type Trace = TraceTable<Felt>;
+    type HashFn = VdfHasher;
+    type RandomCoin = VdfRandomCoin;
+    type TraceLde<E: FieldElement<BaseField = Self::BaseField>> = DefaultTraceLde<E, Self::HashFn>;
+    type ConstraintEvaluator<'a, E: FieldElement<BaseField = Self::BaseField>> = DefaultConstraintEvaluator<'a, Self::Air, E>;
+
+    fn get_pub_inputs(&self, trace: &Self::Trace) -> VdfPublicInputs {
+        // Extract input and output from trace
+        let mut input_hash = [0u8; 32];
+        let mut output_hash = [0u8; 32];
+
+        // Get first row (input)
+        for i in 0..TRACE_WIDTH {
+            let value = trace.get(i, 0).as_int() as u64;
+            input_hash[i * 8..(i + 1) * 8].copy_from_slice(&value.to_le_bytes());
+        }
+
+        // Get last row (output)
+        let last_step = trace.length() - 1;
+        for i in 0..TRACE_WIDTH {
+            let value = trace.get(i, last_step).as_int() as u64;
+            output_hash[i * 8..(i + 1) * 8].copy_from_slice(&value.to_le_bytes());
+        }
+
+        VdfPublicInputs::new(input_hash, output_hash, self.iterations)
+    }
+
+    fn options(&self) -> &ProofOptions {
+        &self.options
+    }
+
+    fn new_trace_lde<E: FieldElement<BaseField = Self::BaseField>>(
+        &self,
+        trace_info: &TraceInfo,
+        main_trace: &ColMatrix<Self::BaseField>,
+        domain: &StarkDomain<Self::BaseField>,
+    ) -> (Self::TraceLde<E>, TracePolyTable<E>) {
+        DefaultTraceLde::new(trace_info, main_trace, domain)
+    }
+
+    fn new_evaluator<'a, E: FieldElement<BaseField = Self::BaseField>>(
+        &self,
+        air: &'a Self::Air,
+        aux_rand_elements: Option<AuxRandElements<E>>,
+        composition_coefficients: ConstraintCompositionCoefficients<E>,
+    ) -> Self::ConstraintEvaluator<'a, E> {
+        DefaultConstraintEvaluator::new(air, aux_rand_elements, composition_coefficients)
+    }
+}
 
 /// Generate STARK proof for VDF computation
 ///
@@ -61,23 +131,22 @@ pub fn generate_proof_with_config(
     let trace = build_trace(&input, checkpoints, &output)?;
 
     // Create proof options
-    // winterfell 0.9: new(num_queries, blowup_factor, grinding_factor, field_extension)
+    // winterfell 0.9: new(num_queries, blowup_factor, grinding_factor, field_extension, fri_folding_factor, fri_max_remainder_size)
     let options = ProofOptions::new(
         config.num_queries,
         config.blowup_factor,
         0,  // grinding factor
         FieldExtension::None,  // No field extension needed for 128-bit security
+        config.fri_folding_factor,
+        config.fri_max_remainder_size,
     );
 
-    // Create public inputs
-    let pub_inputs = VdfPublicInputs::new(input, output, iterations);
+    // Create the prover
+    let prover = VdfProver::new(options, iterations);
 
     // Generate the STARK proof using winterfell
-    let stark_proof = winterfell::prove::<VdfAir, VdfHasher, VdfRandomCoin>(
-        trace,
-        pub_inputs,
-        options,
-    ).map_err(|e| VdfError::ProofGenerationFailed(format!("{:?}", e)))?;
+    let stark_proof = prover.prove(trace)
+        .map_err(|e| VdfError::ProofGenerationFailed(format!("{:?}", e)))?;
 
     // Package into VdfProof
     VdfProof::from_stark_proof(

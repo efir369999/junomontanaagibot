@@ -18,7 +18,7 @@ lim(evidence → ∞) 1 Ɉ → 1 second
 ```
 
 Montana builds trust through **Asymptotic Trust Consensus** (ATC):
-- Physical constraints (atomic time, thermodynamics)
+- Physical constraints (thermodynamics, sequentiality)
 - Computational hardness (post-quantum cryptography)
 - Protocol primitives (VDF, VRF)
 - Consensus mechanisms (DAG, finality)
@@ -44,7 +44,6 @@ Total: 1,260,000,000 Ɉ ≈ 21 million minutes
 
 | Layer | Method | Guarantee |
 |-------|--------|-----------|
-| **Atomic** | 34 NTP sources, 8 regions | Physical (10⁻¹⁹ precision) |
 | **VDF** | Sequential computation | Cannot accelerate |
 | **Finality** | Accumulated VDF depth | Physics-based (self-sovereign) |
 
@@ -121,7 +120,7 @@ Layer 1:  Primitives (VDF, VRF)
        ↑
 Layer 0:  Computation (SHA-3, SPHINCS+)
        ↑
-Layer -1: Physics (Atomic Time, Thermodynamics)
+Layer -1: Physics (Thermodynamics, Sequentiality)
 ```
 
 ---
@@ -186,7 +185,6 @@ docker run -p 8545:8545 -p 8546:8546 -p 30303:30303 montana node --rpc --ws
 
 ```python
 from montana.core.vdf import VDF
-from montana.core.atomic_time import AtomicTimeSource
 from montana.crypto.stark import generate_vdf_proof, verify_vdf_proof
 
 # VDF computation

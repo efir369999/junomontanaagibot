@@ -42,13 +42,12 @@ class FullHeartbeat:
 
     Size: ~17,200 bytes (dominated by SPHINCS+ signature)
     """
-    # Header (fixed size: 113 bytes)
+    # Header (fixed size: 109 bytes)
     version: int                      # Protocol version (1 byte)
     node_type: NodeType              # Always FULL (1 byte)
     timestamp_ms: int                 # UTC timestamp in milliseconds (8 bytes)
     node_id: Hash                     # Node identifier (32 bytes)
     prev_heartbeat_hash: Hash         # Previous heartbeat hash (32 bytes)
-    ntp_offset_ms: int                # NTP time offset (4 bytes, signed)
     public_key: PublicKey             # Node's public key (33 bytes)
 
     # VDF proof (variable, ~100-500 bytes)
@@ -85,7 +84,6 @@ class FullHeartbeat:
         w.write_u64(self.timestamp_ms)
         w.write_raw(self.node_id.data)
         w.write_raw(self.prev_heartbeat_hash.data)
-        w.write_i32(self.ntp_offset_ms)
         w.write_raw(self.public_key.serialize())
         w.write_raw(self.vdf_input.data)
         w.write_raw(self.vdf_output.data)
@@ -110,7 +108,6 @@ class FullHeartbeat:
         timestamp_ms = r.read_u64()
         node_id = Hash(r.read_fixed_bytes(HASH_SIZE))
         prev_heartbeat_hash = Hash(r.read_fixed_bytes(HASH_SIZE))
-        ntp_offset_ms = r.read_i32()
 
         pk, _ = PublicKey.deserialize(data, r.offset)
         r.offset += 33  # PublicKey size
@@ -129,7 +126,6 @@ class FullHeartbeat:
             timestamp_ms=timestamp_ms,
             node_id=node_id,
             prev_heartbeat_hash=prev_heartbeat_hash,
-            ntp_offset_ms=ntp_offset_ms,
             public_key=pk,
             vdf_input=vdf_input,
             vdf_output=vdf_output,
@@ -247,7 +243,6 @@ def create_full_heartbeat(
     vdf_output: Hash,
     vdf_iterations: int,
     vdf_proof: bytes,
-    ntp_offset_ms: int = 0,
     version: int = 8,
 ) -> FullHeartbeat:
     """
@@ -263,7 +258,6 @@ def create_full_heartbeat(
         timestamp_ms=int(time.time() * 1000),
         node_id=node_id,
         prev_heartbeat_hash=prev_heartbeat_hash,
-        ntp_offset_ms=ntp_offset_ms,
         public_key=public_key,
         vdf_input=vdf_input,
         vdf_output=vdf_output,

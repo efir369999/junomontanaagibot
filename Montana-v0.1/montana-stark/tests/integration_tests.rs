@@ -1,7 +1,21 @@
 //! Integration tests for Montana STARK VDF proofs
 
-use montana_stark::{generate_proof, verify_proof, VdfProofConfig, VdfError};
+use montana_stark::{verify_proof, VdfProofConfig, VdfError};
+use montana_stark::prover::generate_proof_with_config;
 use sha3::{Shake256, digest::{Update, ExtendableOutput, XofReader}};
+
+/// Create a test config with matching parameters
+fn test_config(iterations: u64, checkpoint_interval: u64) -> VdfProofConfig {
+    VdfProofConfig {
+        iterations,
+        checkpoint_interval,
+        security_bits: 128,
+        num_queries: 30,
+        blowup_factor: 8,
+        fri_folding_factor: 4,
+        fri_max_remainder_size: 255,
+    }
+}
 
 /// Compute VDF and checkpoints for testing
 fn compute_vdf_with_checkpoints(
@@ -36,16 +50,10 @@ fn test_proof_generation_and_verification() {
     // Compute VDF
     let (output, checkpoints) = compute_vdf_with_checkpoints(&input, iterations, checkpoint_interval);
 
-    // Generate proof
-    let config = VdfProofConfig {
-        iterations,
-        checkpoint_interval,
-        security_bits: 128,
-        num_queries: 30,
-        blowup_factor: 8,
-    };
+    // Generate proof with matching config
+    let config = test_config(iterations, checkpoint_interval);
 
-    let proof = montana_stark::prover::generate_proof_with_config(
+    let proof = generate_proof_with_config(
         input,
         output,
         &checkpoints,
@@ -73,7 +81,8 @@ fn test_proof_fails_with_wrong_output() {
     wrong_output[0] ^= 0xFF;
 
     // Proof generation should fail because output doesn't match
-    let result = generate_proof(input, wrong_output, &checkpoints, iterations);
+    let config = test_config(iterations, checkpoint_interval);
+    let result = generate_proof_with_config(input, wrong_output, &checkpoints, iterations, config);
     assert!(result.is_err(), "Proof generation should fail with wrong output");
 }
 
@@ -91,7 +100,8 @@ fn test_proof_fails_with_wrong_checkpoint() {
     }
 
     // Proof generation should fail
-    let result = generate_proof(input, output, &checkpoints, iterations);
+    let config = test_config(iterations, checkpoint_interval);
+    let result = generate_proof_with_config(input, output, &checkpoints, iterations, config);
     assert!(result.is_err(), "Proof generation should fail with wrong checkpoint");
 }
 
@@ -104,7 +114,8 @@ fn test_verification_fails_with_wrong_input() {
     let (output, checkpoints) = compute_vdf_with_checkpoints(&input, iterations, checkpoint_interval);
 
     // Generate valid proof
-    let proof = generate_proof(input, output, &checkpoints, iterations)
+    let config = test_config(iterations, checkpoint_interval);
+    let proof = generate_proof_with_config(input, output, &checkpoints, iterations, config)
         .expect("Proof generation should succeed");
 
     // Try to verify with wrong input
@@ -126,7 +137,8 @@ fn test_proof_serialization() {
     let (output, checkpoints) = compute_vdf_with_checkpoints(&input, iterations, checkpoint_interval);
 
     // Generate proof
-    let proof = generate_proof(input, output, &checkpoints, iterations)
+    let config = test_config(iterations, checkpoint_interval);
+    let proof = generate_proof_with_config(input, output, &checkpoints, iterations, config)
         .expect("Proof generation should succeed");
 
     // Serialize
@@ -155,7 +167,8 @@ fn test_checkpoint_count_validation() {
     checkpoints.pop();
 
     // Proof generation should fail due to wrong checkpoint count
-    let result = generate_proof(input, output, &checkpoints, iterations);
+    let config = test_config(iterations, checkpoint_interval);
+    let result = generate_proof_with_config(input, output, &checkpoints, iterations, config);
     assert!(matches!(result, Err(VdfError::InvalidCheckpointCount { .. })));
 }
 
@@ -168,7 +181,8 @@ fn test_iterations_mismatch() {
     let (output, checkpoints) = compute_vdf_with_checkpoints(&input, iterations, checkpoint_interval);
 
     // Generate proof with correct iterations
-    let proof = generate_proof(input, output, &checkpoints, iterations)
+    let config = test_config(iterations, checkpoint_interval);
+    let proof = generate_proof_with_config(input, output, &checkpoints, iterations, config)
         .expect("Proof generation should succeed");
 
     // Try to verify with different iterations

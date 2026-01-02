@@ -36,7 +36,7 @@ class NodeType(IntEnum):
     """
     Montana node types per §1.3.1.
 
-    FULL (1): Full history + VDF computation + NTP verification
+    FULL (1): Full history + VDF computation 
     LIGHT (2): History from connection time only
     """
     FULL = NODE_TYPE_FULL    # Type 1: Full Node
