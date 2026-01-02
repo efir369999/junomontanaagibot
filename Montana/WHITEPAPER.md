@@ -806,7 +806,7 @@ Every claim is typed. This is epistemic honesty.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Montana v3.7 — Timechain:** Fully self-sovereign. No external dependencies.
+**Montana v4.0 — Timechain:** Self-sovereignty through physics. No external dependencies.
 
 ---
 
@@ -1004,9 +1004,9 @@ m ≥ 3 autonomous systems
 
 ### Montana
 
-[22] Montana Technical Specification v3.7 (2026).
+[22] Montana Technical Specification v4.0 (2026).
 
-[23] Asymptotic Trust Consensus (ATC) v10 — Layers -1, 0, 1, 2 (2026).
+[23] Asymptotic Trust Consensus (ATC) v11 — Layers -1, 0, 1, 2 (2026).
 
 ---
 
