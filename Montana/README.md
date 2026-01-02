@@ -1,6 +1,6 @@
 # Ɉ Montana: Temporal Time Unit
 
-**Version:** 3.9
+**Version:** 4.0
 **Protocol:** 11
 **Ticker:** $MONT
 **Architecture:** Timechain
@@ -23,7 +23,7 @@ Montana builds trust through **Asymptotic Trust Consensus** (ATC):
 - Protocol primitives (VDF, Lattice-VRF)
 - Consensus mechanisms (DAG, UTC finality)
 
-**v3.9:** Security Stack classification, Lattice-VRF (Type B), ML-DSA signatures, UTC finality.
+**v4.0:** Security Stack (§30), unified naming, Lattice-VRF (Type B), ML-DSA, UTC finality.
 
 ---
 

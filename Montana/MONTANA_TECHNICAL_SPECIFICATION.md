@@ -1,7 +1,7 @@
-# Ɉ Montana: Temporal Time Unit — Technical Specification v3.9
+# Ɉ Montana: Temporal Time Unit — Technical Specification v4.0
 
 **Protocol Version:** 11
-**Document Version:** 3.9
+**Document Version:** 4.0
 **Date:** January 2026
 **Ticker:** $MONT
 **Architecture:** Timechain
@@ -13,7 +13,7 @@
 > ```
 > **Timechain:** chain of time, bounded by physics.
 > Built on ATC Layer 3+. See [MONTANA_ATC_MAPPING.md](MONTANA_ATC_MAPPING.md) for layer mapping.
-> **v3.9:** Security Stack classification (§30), Lattice-VRF (Type B), ML-DSA signatures, UTC finality.
+> **v4.0:** Security Stack (§30), unified naming, Lattice-VRF (Type B), ML-DSA, UTC finality.
 
 ---
 
@@ -4686,6 +4686,6 @@ Mechanism for asymptotic trust in the value of time
 
 **$MONT**
 
-Technical Specification v3.9 | January 2026
+Technical Specification v4.0 | January 2026
 
 </div>

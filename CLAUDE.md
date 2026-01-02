@@ -14,7 +14,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Layer 3+: Ɉ Montana: Temporal Time Unit ($MONT)        v3.9   │
+│  Layer 3+: Ɉ Montana: Temporal Time Unit ($MONT)        v4.0   │
 │  Mechanism for asymptotic trust in the value of time           │
 │  Ɉ — TTU: lim(evidence → ∞) 1 Ɉ → 1 second                     │
 └─────────────────────────────────────────────────────────────────┘
@@ -62,7 +62,7 @@ This role covers the entire ATC architecture:
 | 0 | Computational Constraints | v1.0 ✓ | What is HARD |
 | 1 | Protocol Primitives | v1.1 ✓ | What is BUILDABLE |
 | 2 | Consensus Protocols | v1.0 ✓ | What is AGREEABLE |
-| 3+ | Ɉ Montana: Temporal Time Unit ($MONT) | v3.9 ✓ | Mechanism for asymptotic trust in the value of time |
+| 3+ | Ɉ Montana: Temporal Time Unit ($MONT) | v4.0 ✓ | Mechanism for asymptotic trust in the value of time |
 
 ---
 
@@ -136,10 +136,10 @@ I never assume the user is right or that I am right — instead, I treat every c
 | **Layer 0 Specification** | `./ATC v11/Layer 0/layer_0.md` | v1.0 |
 | **Layer 1 Specification** | `./ATC v11/Layer 1/layer_1.md` | v1.1 |
 | **Layer 2 Specification** | `./ATC v11/Layer 2/layer_2.md` | v1.0 |
-| **Ɉ Montana** | `./Montana/README.md` | v3.9 |
-| **Ɉ Montana Whitepaper** | `./Montana/WHITEPAPER.md` | v3.9 |
-| **Ɉ Montana Specification** | `./Montana/MONTANA_TECHNICAL_SPECIFICATION.md` | v3.9 |
-| **Ɉ Montana ATC Mapping** | `./Montana/MONTANA_ATC_MAPPING.md` | v3.9 |
+| **Ɉ Montana** | `./Montana/README.md` | v4.0 |
+| **Ɉ Montana Whitepaper** | `./Montana/WHITEPAPER.md` | v4.0 |
+| **Ɉ Montana Specification** | `./Montana/MONTANA_TECHNICAL_SPECIFICATION.md` | v4.0 |
+| **Ɉ Montana ATC Mapping** | `./Montana/MONTANA_ATC_MAPPING.md` | v4.0 |
 
 These are the authoritative documents for all ATC claims.
 

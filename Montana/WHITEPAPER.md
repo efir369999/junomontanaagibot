@@ -1,6 +1,6 @@
 # Ɉ Montana: Temporal Time Unit
 
-**Version:** 3.9
+**Version:** 4.0
 **Protocol:** 11
 **Date:** January 2026
 **Ticker:** $MONT
@@ -36,7 +36,7 @@ Timechain:   chain of time, bounded by physics
              "Time passed — this is fact"
 ```
 
-**Montana v3.9** is fully self-sovereign. Finality is determined by UTC boundaries — time itself becomes the consensus mechanism. All cryptographic primitives are post-quantum secure.
+**Montana v4.0** is fully self-sovereign. Finality is determined by UTC boundaries — time itself becomes the consensus mechanism. All cryptographic primitives are post-quantum secure.
 
 The more evidence accumulates, the closer Ɉ approaches its definition. We never claim to arrive; we asymptotically approach.
 

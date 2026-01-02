@@ -1,6 +1,6 @@
 # Ɉ Montana: Temporal Time Unit ↔ ATC Layer Mapping
 
-**Ɉ Montana Version:** 3.9
+**Ɉ Montana Version:** 4.0
 **Protocol:** 11
 **Ticker:** $MONT
 **Architecture:** Timechain
@@ -18,7 +18,7 @@ lim(evidence → ∞) 1 Ɉ → 1 second
 
 **Timechain:** chain of time, bounded by physics.
 
-**v3.9:** Security Stack classification, Lattice-VRF (Type B), ML-DSA signatures, UTC finality.
+**v4.0:** Security Stack (§30), unified naming, Lattice-VRF (Type B), ML-DSA, UTC finality.
 
 This document maps Ɉ Montana components to their foundational ATC layers, showing exactly which constraints and primitives the mechanism relies upon.
 
@@ -297,18 +297,18 @@ To verify Montana compliance with ATC:
    ✓ Liveness: After GST
    ✓ Finality: Accumulated VDF (self-sovereign)
 
-→ Montana v3.9 COMPLIES with ATC v11
-→ Montana v3.9 is a TIMECHAIN
-→ Montana v3.9 is SELF-SOVEREIGN
-→ Montana v3.9 uses ML-DSA signatures (Type B security)
-→ Montana v3.9 uses UTC finality with ±5 second tolerance
+→ Montana v4.0 COMPLIES with ATC v11
+→ Montana v4.0 is a TIMECHAIN
+→ Montana v4.0 is SELF-SOVEREIGN
+→ Montana v4.0 uses ML-DSA signatures (Type B security)
+→ Montana v4.0 uses UTC finality with ±5 second tolerance
 ```
 
 ---
 
 ## References
 
-- Montana Technical Specification v3.9
+- Montana Technical Specification v4.0
 - ATC Layer -1 v2.1
 - ATC Layer 0 v1.0
 - ATC Layer 1 v1.1
@@ -318,4 +318,4 @@ To verify Montana compliance with ATC:
 
 *This mapping enables verification that Montana correctly inherits ATC layer guarantees and does not assume stronger properties than lower layers provide.*
 
-*Montana v3.9: Timechain — self-sovereign UTC finality through physics. Security Stack classification (§30).*
+*Montana v4.0: Timechain — self-sovereign UTC finality through physics. Security Stack (§30).*

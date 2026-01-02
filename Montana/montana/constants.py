@@ -1,9 +1,9 @@
 """
-Ɉ Montana Protocol Constants v3.9
+Ɉ Montana: Temporal Time Unit — Protocol Constants v4.0
 
 All protocol constants per MONTANA_TECHNICAL_SPECIFICATION.md §19, §28.
 
-v3.9: Security Stack classification (§30), Lattice-VRF (Type B), ML-DSA signatures, UTC finality.
+v4.0: Security Stack (§30), unified naming, Lattice-VRF (Type B), ML-DSA, UTC finality.
 """
 
 from typing import Dict, List, Tuple

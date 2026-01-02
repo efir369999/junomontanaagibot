@@ -1,17 +1,17 @@
 """
-Ɉ Montana: Temporal Time Unit v3.9
+Ɉ Montana: Temporal Time Unit v4.0
 
 Mechanism for asymptotic trust in the value of time.
 lim(evidence → ∞) 1 Ɉ → 1 second
 
 Built on ATC Layer 3+.
 
-v3.9: Security Stack classification (§30), Lattice-VRF (Type B), ML-DSA signatures.
+v4.0: Security Stack (§30), unified naming, Lattice-VRF (Type B), ML-DSA, UTC finality.
 
 Bootstrap server: 176.124.208.93:19656
 """
 
-__version__ = "3.9.0"
+__version__ = "4.0.0"
 __protocol_version__ = 11
 
 from montana.constants import (
