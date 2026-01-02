@@ -32,6 +32,14 @@
 15. [Telegram Bot Protocol](#15-telegram-bot-protocol)
 16. [Cryptographic Primitives](#16-cryptographic-primitives)
 17. [Network Protocol](#17-network-protocol)
+    - [17.4 Peer Discovery](#174-peer-discovery)
+    - [17.5 Connection Handshake](#175-connection-handshake)
+    - [17.6 Message Format](#176-message-format)
+    - [17.7 Address Relay](#177-address-relay)
+    - [17.8 Inventory Protocol](#178-inventory-protocol)
+    - [17.9 Block Relay](#179-block-relay)
+    - [17.10 Ban System](#1710-ban-system)
+    - [17.11 Connection Management](#1711-connection-management)
 18. [Governance](#18-governance)
 19. [Constants Reference](#19-constants-reference)
 20. [API Reference](#20-api-reference)
@@ -543,6 +551,61 @@ def compute_vdf(input_data: bytes, iterations: int) -> VDFProof:
         proof=proof
     )
 ```
+
+### 5.3 STARK Proof Specification
+
+VDF verification uses FRI-based STARK proofs for O(log T) verification complexity.
+
+**Implementation Status:** SPECIFICATION ONLY — implementation pending.
+
+**VDF Construction Note:** Montana uses iterated hashing (H^T), not group-based VDFs (Wesolowski, Pietrzak). This is simpler but has the same sequentiality property. The tradeoff: requires STARK for efficient verification (group-based VDFs have built-in O(1) verification).
+
+```python
+# STARK proof parameters (targets — require benchmarking)
+STARK_SECURITY_BITS: int = 128          # Target security level
+STARK_HASH_FUNCTION: str = "SHAKE256"
+
+# Complexity bounds (theoretical)
+# Proof size: O(log² T) — exact size TBD after implementation
+# Verification: O(log T) hash operations
+# Prover time: O(T log T)
+```
+
+```python
+@dataclass
+class STARKProof:
+    """FRI-based STARK proof for VDF verification."""
+    commitments: List[bytes]        # Merkle roots per FRI layer
+    query_responses: List[bytes]    # FRI query paths
+    final_polynomial: bytes         # Low-degree polynomial
+
+
+def generate_stark_proof(checkpoints: List[bytes]) -> STARKProof:
+    """
+    Generate FRI-based STARK proof for VDF computation.
+
+    STATUS: NOT IMPLEMENTED — specification only.
+
+    Proves: output = H^T(input) using checkpoint trace.
+    """
+    raise NotImplementedError("STARK proof generation pending implementation")
+
+
+def verify_stark_proof(
+    input_hash: bytes,
+    output_hash: bytes,
+    iterations: int,
+    proof: STARKProof
+) -> bool:
+    """
+    Verify STARK proof for VDF computation.
+
+    STATUS: NOT IMPLEMENTED — specification only.
+    """
+    raise NotImplementedError("STARK proof verification pending implementation")
+```
+
+**Design note:** T = 2²⁴ is fixed. Specialized hardware may provide constant-factor speedup (bounded by circuit physics), but not asymptotic improvement. The system degrades gracefully: 2x faster hardware halves attack cost, but attack cost remains non-zero wallclock time.
 
 ---
 
@@ -1498,6 +1561,1123 @@ class MessageType(IntEnum):
     NEW_TRANSACTION = 0x22
     GET_VDF_STATE = 0x30
     VDF_STATE = 0x31
+    GET_ADDR = 0x40
+    ADDR = 0x41
+    NOT_FOUND = 0x42
+```
+
+### 17.4 Peer Discovery
+
+Montana uses a multi-layer peer discovery system.
+
+#### 17.4.1 Bootstrap Nodes
+
+```python
+# Primary bootstrap node (Genesis infrastructure)
+BOOTSTRAP_NODES = [
+    BootstrapNode(
+        name="montana-genesis-1",
+        ip="176.124.208.93",
+        port=19656,
+        pubkey="GENESIS_NODE_PUBKEY_PLACEHOLDER",  # Set at mainnet launch
+        region="EU",
+        services=SERVICE_FULL_NODE | SERVICE_VDF | SERVICE_NTP,
+    ),
+]
+
+# Service flags
+SERVICE_FULL_NODE: int = 0x01      # Full blockchain history
+SERVICE_LIGHT_NODE: int = 0x02     # Light node
+SERVICE_VDF: int = 0x04            # Computes VDF proofs
+SERVICE_NTP: int = 0x08            # Queries atomic time
+SERVICE_RELAY: int = 0x10          # Relays transactions
+
+@dataclass
+class BootstrapNode:
+    name: str
+    ip: str
+    port: int
+    pubkey: str
+    region: str
+    services: int
+```
+
+#### 17.4.2 DNS Seeds
+
+```python
+# DNS seeds for decentralized discovery (post-launch)
+DNS_SEEDS = [
+    "seed1.montana.network",
+    "seed2.montana.network",
+    "seed3.montana.network",
+]
+
+DNS_SEED_QUERY_TIMEOUT_SEC: int = 10
+DNS_SEED_MAX_RESULTS: int = 256
+
+def query_dns_seeds() -> List[PeerAddress]:
+    """
+    Query DNS seeds for peer addresses.
+    Returns A/AAAA records as potential peers.
+    """
+    peers = []
+    for seed in DNS_SEEDS:
+        try:
+            records = dns_resolve(seed, timeout=DNS_SEED_QUERY_TIMEOUT_SEC)
+            for ip in records:
+                peers.append(PeerAddress(
+                    ip=ip,
+                    port=DEFAULT_PORT,
+                    services=SERVICE_FULL_NODE,
+                    last_seen=0,  # Unknown
+                ))
+        except DNSError:
+            continue
+    return peers[:DNS_SEED_MAX_RESULTS]
+```
+
+#### 17.4.3 Peer Address Storage
+
+```python
+# Peer database configuration
+PEER_DB_MAX_ADDRESSES: int = 5000
+PEER_DB_MAX_NEW: int = 1000            # Unverified addresses
+PEER_DB_MAX_TRIED: int = 4000          # Verified addresses
+PEER_HORIZON_DAYS: int = 30            # Ignore older addresses
+
+@dataclass
+class PeerAddress:
+    ip: str                             # IPv4 or IPv6
+    port: int                           # u16
+    services: int                       # Service flags
+    last_seen: int                      # Unix timestamp
+    last_try: int                       # Last connection attempt
+    last_success: int                   # Last successful connection
+    attempts: int                       # Failed attempts since success
+
+    def is_valid(self) -> bool:
+        """Check if address is valid for connection."""
+        if self.attempts > 10:
+            return False
+        if time.time() - self.last_seen > PEER_HORIZON_DAYS * 86400:
+            return False
+        return True
+
+# Peer storage schema (extends §25)
+PEER_SCHEMA = """
+CREATE TABLE peers (
+    ip TEXT PRIMARY KEY,
+    port INTEGER NOT NULL,
+    services INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    last_try INTEGER DEFAULT 0,
+    last_success INTEGER DEFAULT 0,
+    attempts INTEGER DEFAULT 0,
+    source TEXT,  -- 'dns', 'bootstrap', 'addr', 'incoming'
+
+    INDEX idx_peers_last_seen (last_seen DESC)
+);
+"""
+```
+
+#### 17.4.4 Discovery Flow
+
+```python
+def discover_peers(state: NodeState) -> List[PeerAddress]:
+    """
+    Multi-stage peer discovery.
+
+    1. Load cached peers from database
+    2. Query DNS seeds if insufficient
+    3. Fall back to bootstrap nodes
+    4. Request addresses from connected peers
+    """
+    peers = []
+
+    # Stage 1: Cached peers
+    cached = state.db.get_recent_peers(limit=100)
+    peers.extend(cached)
+
+    # Stage 2: DNS seeds (if < MIN_OUTBOUND_CONNECTIONS peers)
+    if len(peers) < MIN_OUTBOUND_CONNECTIONS:
+        dns_peers = query_dns_seeds()
+        peers.extend(dns_peers)
+
+    # Stage 3: Bootstrap nodes (always include for initial sync)
+    if state.chain_height == 0:
+        for node in BOOTSTRAP_NODES:
+            peers.append(PeerAddress(
+                ip=node.ip,
+                port=node.port,
+                services=node.services,
+                last_seen=int(time.time()),
+            ))
+
+    # Stage 4: Address relay from connected peers
+    for peer in state.connected_peers:
+        if peer.connection_time > 60:  # Connected > 1 min
+            peer.send(Message(type=MessageType.GET_ADDR))
+
+    return deduplicate_peers(peers)
+```
+
+### 17.5 Connection Handshake
+
+#### 17.5.1 Hello Message
+
+```python
+@dataclass
+class HelloMessage:
+    """
+    Initial handshake message. Sent by both sides.
+    Contains Montana protocol version and node capabilities.
+    """
+    # Protocol
+    protocol_version: int           # u8 — PROTOCOL_VERSION = 8
+    network_id: int                 # u32 — NETWORK_ID_MAINNET
+
+    # Node identity
+    node_type: int                  # u8 — NodeType.FULL or NodeType.LIGHT
+    services: int                   # u64 — Service flags bitmap
+    user_agent: str                 # Variable — "Montana/1.0.0"
+
+    # Timing
+    timestamp_ms: int               # u64 — Local time in milliseconds
+
+    # Chain state
+    best_height: int                # u64 — Current chain height
+    best_hash: Hash                 # 32 bytes — Best block hash
+
+    # Montana-specific
+    vdf_depth: int                  # u64 — Accumulated VDF depth
+    tier: int                       # u8 — Participation tier (1, 2, 3)
+
+    # Connection preferences
+    relay: bool                     # Accept transaction relay
+    listen_port: int                # u16 — Port for incoming (0 if not listening)
+
+    def serialize(self) -> bytes:
+        writer = ByteWriter()
+        writer.write_u8(self.protocol_version)
+        writer.write_u32(self.network_id)
+        writer.write_u8(self.node_type)
+        writer.write_u64(self.services)
+        writer.write_var_string(self.user_agent)
+        writer.write_u64(self.timestamp_ms)
+        writer.write_u64(self.best_height)
+        writer.write_raw(self.best_hash.data)
+        writer.write_u64(self.vdf_depth)
+        writer.write_u8(self.tier)
+        writer.write_bool(self.relay)
+        writer.write_u16(self.listen_port)
+        return writer.to_bytes()
+
+# Validation constants
+HELLO_MAX_USER_AGENT_LENGTH: int = 256
+HELLO_MAX_TIME_DRIFT_SEC: int = 7200    # 2 hours max drift
+HELLO_MIN_PROTOCOL_VERSION: int = 8
+```
+
+#### 17.5.2 Hello Acknowledgment
+
+```python
+@dataclass
+class HelloAckMessage:
+    """
+    Handshake acknowledgment. Confirms or rejects connection.
+    """
+    accepted: bool                  # Connection accepted
+    reject_code: int                # 0 if accepted, error code otherwise
+    reject_reason: str              # Human-readable reason (if rejected)
+
+class RejectCode(IntEnum):
+    NONE = 0
+    PROTOCOL_VERSION = 1            # Incompatible protocol
+    NETWORK_MISMATCH = 2            # Wrong network (mainnet/testnet)
+    TIME_DRIFT = 3                  # Clock too far off
+    BANNED = 4                      # Peer is banned
+    TOO_MANY_CONNECTIONS = 5        # Connection limit reached
+    DUPLICATE = 6                   # Already connected
+```
+
+#### 17.5.3 Handshake Flow
+
+```python
+HANDSHAKE_TIMEOUT_SEC: int = 30
+
+async def perform_handshake(
+    conn: Connection,
+    local_state: NodeState,
+    is_outbound: bool
+) -> Tuple[bool, Optional[PeerInfo]]:
+    """
+    Complete connection handshake.
+
+    Flow (both directions):
+    1. Initiator sends HELLO
+    2. Responder sends HELLO
+    3. Both validate received HELLO
+    4. Initiator sends HELLO_ACK
+    5. Responder sends HELLO_ACK
+    6. If both accepted → connected
+
+    Returns (success, peer_info)
+    """
+    # Build our HELLO
+    our_hello = HelloMessage(
+        protocol_version=PROTOCOL_VERSION,
+        network_id=NETWORK_ID_MAINNET,
+        node_type=local_state.node_type,
+        services=local_state.services,
+        user_agent=f"Montana/{VERSION_STRING}",
+        timestamp_ms=get_atomic_time_ms(),
+        best_height=local_state.chain_height,
+        best_hash=local_state.chain_tip_hash,
+        vdf_depth=local_state.accumulated_vdf_depth,
+        tier=local_state.participation_tier,
+        relay=True,
+        listen_port=local_state.listen_port if local_state.accepting else 0,
+    )
+
+    # Send HELLO
+    conn.send(Message(type=MessageType.HELLO, payload=our_hello.serialize()))
+
+    # Receive their HELLO
+    their_hello_msg = await conn.recv(timeout=HANDSHAKE_TIMEOUT_SEC)
+    if their_hello_msg.type != MessageType.HELLO:
+        return False, None
+
+    their_hello = HelloMessage.deserialize(their_hello_msg.payload)
+
+    # Validate their HELLO
+    reject_code, reject_reason = validate_hello(their_hello, local_state)
+
+    # Send HELLO_ACK
+    our_ack = HelloAckMessage(
+        accepted=(reject_code == RejectCode.NONE),
+        reject_code=reject_code,
+        reject_reason=reject_reason,
+    )
+    conn.send(Message(type=MessageType.HELLO_ACK, payload=our_ack.serialize()))
+
+    # Receive their HELLO_ACK
+    their_ack_msg = await conn.recv(timeout=HANDSHAKE_TIMEOUT_SEC)
+    if their_ack_msg.type != MessageType.HELLO_ACK:
+        return False, None
+
+    their_ack = HelloAckMessage.deserialize(their_ack_msg.payload)
+
+    # Both must accept
+    if not our_ack.accepted or not their_ack.accepted:
+        return False, None
+
+    # Build peer info
+    peer_info = PeerInfo(
+        address=conn.remote_address,
+        services=their_hello.services,
+        node_type=their_hello.node_type,
+        best_height=their_hello.best_height,
+        vdf_depth=their_hello.vdf_depth,
+        user_agent=their_hello.user_agent,
+        connected_at=int(time.time()),
+        is_outbound=is_outbound,
+    )
+
+    return True, peer_info
+
+def validate_hello(hello: HelloMessage, state: NodeState) -> Tuple[int, str]:
+    """Validate incoming HELLO message."""
+
+    # Protocol version
+    if hello.protocol_version < HELLO_MIN_PROTOCOL_VERSION:
+        return RejectCode.PROTOCOL_VERSION, f"Protocol {hello.protocol_version} < {HELLO_MIN_PROTOCOL_VERSION}"
+
+    # Network
+    if hello.network_id != NETWORK_ID_MAINNET:
+        return RejectCode.NETWORK_MISMATCH, "Wrong network"
+
+    # Time drift
+    local_time = get_atomic_time_ms()
+    drift_sec = abs(hello.timestamp_ms - local_time) / 1000
+    if drift_sec > HELLO_MAX_TIME_DRIFT_SEC:
+        return RejectCode.TIME_DRIFT, f"Time drift {drift_sec}s > {HELLO_MAX_TIME_DRIFT_SEC}s"
+
+    # User agent length
+    if len(hello.user_agent) > HELLO_MAX_USER_AGENT_LENGTH:
+        return RejectCode.PROTOCOL_VERSION, "User agent too long"
+
+    return RejectCode.NONE, ""
+```
+
+### 17.6 Message Format
+
+#### 17.6.1 Message Header
+
+```python
+MESSAGE_HEADER_SIZE: int = 13  # 4 + 1 + 4 + 4 bytes
+
+@dataclass
+class MessageHeader:
+    """
+    Network message header.
+    All messages are prefixed with this header.
+    """
+    magic: bytes                    # 4 bytes — Network magic
+    command: int                    # 1 byte — MessageType enum
+    payload_size: int               # 4 bytes — Payload length
+    checksum: bytes                 # 4 bytes — SHA3-256(payload)[:4]
+
+    def serialize(self) -> bytes:
+        return (
+            self.magic +
+            bytes([self.command]) +
+            self.payload_size.to_bytes(4, 'little') +
+            self.checksum
+        )
+
+    @classmethod
+    def deserialize(cls, data: bytes) -> 'MessageHeader':
+        return cls(
+            magic=data[0:4],
+            command=data[4],
+            payload_size=int.from_bytes(data[5:9], 'little'),
+            checksum=data[9:13],
+        )
+
+def compute_checksum(payload: bytes) -> bytes:
+    """Compute message checksum using SHA3-256."""
+    return sha3_256(payload)[:4]
+```
+
+#### 17.6.2 Message Limits
+
+```python
+# Size limits
+MAX_MESSAGE_SIZE: int = 4_194_304       # 4 MB (= MAX_BLOCK_SIZE)
+MAX_INV_COUNT: int = 50000              # Max items in INV message
+MAX_ADDR_COUNT: int = 1000              # Max addresses per ADDR message
+MAX_HEADERS_COUNT: int = 2000           # Max headers per response
+MAX_GETDATA_COUNT: int = 50000          # Max items in GETDATA
+
+# Rate limits
+MESSAGE_RATE_LIMIT_PER_SEC: int = 100   # Max messages per second
+MESSAGE_RATE_WINDOW_SEC: int = 10       # Rate limit window
+```
+
+#### 17.6.3 Message Serialization
+
+```python
+@dataclass
+class Message:
+    type: MessageType
+    payload: bytes
+
+    def serialize(self, network_magic: bytes) -> bytes:
+        """Serialize complete message with header."""
+        header = MessageHeader(
+            magic=network_magic,
+            command=self.type,
+            payload_size=len(self.payload),
+            checksum=compute_checksum(self.payload),
+        )
+        return header.serialize() + self.payload
+
+    @classmethod
+    def deserialize(cls, header: MessageHeader, payload: bytes) -> 'Message':
+        """Deserialize message from header and payload."""
+        # Verify checksum
+        expected = compute_checksum(payload)
+        if header.checksum != expected:
+            raise ChecksumError(f"Checksum mismatch")
+
+        return cls(
+            type=MessageType(header.command),
+            payload=payload,
+        )
+```
+
+### 17.7 Address Relay
+
+#### 17.7.1 Address Messages
+
+```python
+@dataclass
+class AddrMessage:
+    """
+    List of known peer addresses.
+    Sent in response to GET_ADDR or proactively.
+    """
+    addresses: List[PeerAddress]    # Max MAX_ADDR_COUNT
+
+    def serialize(self) -> bytes:
+        writer = ByteWriter()
+        writer.write_var_int(len(self.addresses))
+        for addr in self.addresses:
+            writer.write_var_string(addr.ip)
+            writer.write_u16(addr.port)
+            writer.write_u64(addr.services)
+            writer.write_u64(addr.last_seen)
+        return writer.to_bytes()
+
+# Address relay configuration
+ADDR_RELAY_INTERVAL_SEC: int = 30       # Min interval between relays
+ADDR_RELAY_MAX_PER_PEER: int = 10       # Max addresses per relay
+ADDR_RELAY_PROBABILITY: float = 0.25    # Probability to relay to each peer
+```
+
+#### 17.7.2 Address Handling
+
+```python
+def handle_addr_message(
+    msg: AddrMessage,
+    from_peer: Peer,
+    state: NodeState
+) -> None:
+    """
+    Process received addresses.
+
+    1. Validate addresses
+    2. Store new addresses
+    3. Optionally relay to other peers
+    """
+    now = int(time.time())
+    new_addresses = []
+
+    for addr in msg.addresses[:MAX_ADDR_COUNT]:
+        # Skip invalid
+        if not is_valid_address(addr.ip, addr.port):
+            continue
+
+        # Skip old addresses
+        if now - addr.last_seen > PEER_HORIZON_DAYS * 86400:
+            continue
+
+        # Skip self
+        if addr.ip == state.external_ip:
+            continue
+
+        # Store or update
+        existing = state.db.get_peer(addr.ip)
+        if existing is None or addr.last_seen > existing.last_seen:
+            state.db.upsert_peer(addr)
+            new_addresses.append(addr)
+
+    # Relay new addresses to some peers
+    if new_addresses:
+        relay_addresses(new_addresses, exclude=from_peer, state=state)
+
+def relay_addresses(
+    addresses: List[PeerAddress],
+    exclude: Optional[Peer],
+    state: NodeState
+) -> None:
+    """Relay addresses to connected peers."""
+    for peer in state.connected_peers:
+        if peer == exclude:
+            continue
+        if random.random() > ADDR_RELAY_PROBABILITY:
+            continue
+
+        # Select subset to relay
+        to_relay = random.sample(
+            addresses,
+            min(len(addresses), ADDR_RELAY_MAX_PER_PEER)
+        )
+
+        peer.send(Message(
+            type=MessageType.ADDR,
+            payload=AddrMessage(addresses=to_relay).serialize()
+        ))
+```
+
+### 17.8 Inventory Protocol
+
+#### 17.8.1 Inventory Types
+
+```python
+class InvType(IntEnum):
+    """Types of inventory objects."""
+    ERROR = 0
+    TX = 1                          # Transaction
+    BLOCK = 2                       # Block
+    HEARTBEAT = 3                   # Heartbeat (Montana-specific)
+    VDF_CHECKPOINT = 4              # VDF checkpoint (Montana-specific)
+
+@dataclass
+class Inventory:
+    """Single inventory item."""
+    type: InvType                   # u8
+    hash: Hash                      # 32 bytes
+
+    def serialize(self) -> bytes:
+        return bytes([self.type]) + self.hash.data
+```
+
+#### 17.8.2 Inventory Messages
+
+```python
+@dataclass
+class InvMessage:
+    """Announce available inventory."""
+    items: List[Inventory]          # Max MAX_INV_COUNT
+
+    def serialize(self) -> bytes:
+        writer = ByteWriter()
+        writer.write_var_int(len(self.items))
+        for inv in self.items:
+            writer.write_raw(inv.serialize())
+        return writer.to_bytes()
+
+@dataclass
+class GetDataMessage:
+    """Request inventory data."""
+    items: List[Inventory]          # Max MAX_GETDATA_COUNT
+
+@dataclass
+class NotFoundMessage:
+    """Indicate requested items not found."""
+    items: List[Inventory]
+```
+
+#### 17.8.3 Inventory Handling
+
+```python
+# Track what inventory each peer knows about
+class PeerInventory:
+    known_tx: Set[Hash]             # Transactions peer has
+    known_blocks: Set[Hash]         # Blocks peer has
+    known_heartbeats: Set[Hash]     # Heartbeats peer has
+
+    # Pending requests
+    requested: Dict[Hash, int]      # hash -> request_time
+
+    REQUEST_TIMEOUT_SEC: int = 60
+
+def handle_inv_message(
+    msg: InvMessage,
+    from_peer: Peer,
+    state: NodeState
+) -> None:
+    """
+    Process inventory announcement.
+    Request items we don't have.
+    """
+    to_request = []
+
+    for inv in msg.items:
+        # Skip if we have it
+        if state.has_inventory(inv):
+            from_peer.inventory.add_known(inv)
+            continue
+
+        # Skip if already requested from another peer
+        if state.is_requested(inv.hash):
+            continue
+
+        to_request.append(inv)
+
+    if to_request:
+        # Request data
+        from_peer.send(Message(
+            type=MessageType.GET_DATA,
+            payload=GetDataMessage(items=to_request).serialize()
+        ))
+
+        # Mark as requested
+        for inv in to_request:
+            state.mark_requested(inv.hash, from_peer)
+```
+
+### 17.9 Block Relay
+
+#### 17.9.1 Block Messages
+
+```python
+@dataclass
+class GetBlocksMessage:
+    """Request block hashes starting from locator."""
+    locator_hashes: List[Hash]      # Block locator (exponential backoff)
+    stop_hash: Hash                 # Stop at this hash (or zero for tip)
+
+@dataclass
+class BlocksMessage:
+    """Response with block data."""
+    blocks: List[Block]             # Max IBD_BATCH_SIZE
+
+@dataclass
+class GetHeadersMessage:
+    """Request block headers."""
+    locator_hashes: List[Hash]
+    stop_hash: Hash
+
+@dataclass
+class HeadersMessage:
+    """Response with block headers."""
+    headers: List[BlockHeader]      # Max MAX_HEADERS_COUNT
+```
+
+#### 17.9.2 Block Locator
+
+```python
+def build_block_locator(tip: BlockHeader, state: NodeState) -> List[Hash]:
+    """
+    Build block locator with exponential backoff.
+
+    Returns hashes at heights: tip, tip-1, tip-2, tip-3, tip-5, tip-9, ...
+    Plus genesis block.
+    """
+    locator = []
+    height = tip.height
+    step = 1
+
+    while height >= 0:
+        block_hash = state.get_block_hash_at_height(height)
+        if block_hash:
+            locator.append(block_hash)
+
+        if len(locator) >= 10:
+            step *= 2
+
+        height -= step
+
+    # Always include genesis
+    if locator[-1] != GENESIS_BLOCK_HASH:
+        locator.append(GENESIS_BLOCK_HASH)
+
+    return locator
+```
+
+#### 17.9.3 Orphan Block Management
+
+```python
+ORPHAN_MAX_COUNT: int = 100
+ORPHAN_EXPIRY_SEC: int = 3600           # 1 hour
+
+@dataclass
+class OrphanBlock:
+    block: Block
+    received_at: int
+    from_peer: PeerId
+
+class OrphanManager:
+    """Manage blocks whose parent we don't have yet."""
+
+    orphans: Dict[Hash, OrphanBlock]            # block_hash -> orphan
+    by_parent: Dict[Hash, Set[Hash]]            # parent_hash -> orphan hashes
+
+    def add_orphan(self, block: Block, peer: PeerId) -> bool:
+        """
+        Add orphan block.
+        Returns False if orphan limit reached.
+        """
+        block_hash = block.block_hash()
+        parent_hash = block.header.parent_hash
+
+        # Check limits
+        if len(self.orphans) >= ORPHAN_MAX_COUNT:
+            self.prune_oldest()
+
+        if block_hash in self.orphans:
+            return False  # Already have it
+
+        # Store orphan
+        self.orphans[block_hash] = OrphanBlock(
+            block=block,
+            received_at=int(time.time()),
+            from_peer=peer,
+        )
+
+        # Index by parent
+        if parent_hash not in self.by_parent:
+            self.by_parent[parent_hash] = set()
+        self.by_parent[parent_hash].add(block_hash)
+
+        return True
+
+    def get_children(self, parent_hash: Hash) -> List[Block]:
+        """
+        Get all orphans waiting for this parent.
+        Called when parent block is received.
+        """
+        if parent_hash not in self.by_parent:
+            return []
+
+        children = []
+        for block_hash in self.by_parent[parent_hash]:
+            if block_hash in self.orphans:
+                children.append(self.orphans[block_hash].block)
+                del self.orphans[block_hash]
+
+        del self.by_parent[parent_hash]
+        return children
+
+    def prune_expired(self) -> int:
+        """Remove expired orphans."""
+        cutoff = int(time.time()) - ORPHAN_EXPIRY_SEC
+        expired = [h for h, o in self.orphans.items()
+                   if o.received_at < cutoff]
+
+        for block_hash in expired:
+            orphan = self.orphans[block_hash]
+            parent_hash = orphan.block.header.parent_hash
+
+            del self.orphans[block_hash]
+            if parent_hash in self.by_parent:
+                self.by_parent[parent_hash].discard(block_hash)
+
+        return len(expired)
+
+    def prune_oldest(self) -> None:
+        """Remove oldest orphan to make room."""
+        if not self.orphans:
+            return
+
+        oldest_hash = min(self.orphans.keys(),
+                         key=lambda h: self.orphans[h].received_at)
+
+        orphan = self.orphans[oldest_hash]
+        parent_hash = orphan.block.header.parent_hash
+
+        del self.orphans[oldest_hash]
+        if parent_hash in self.by_parent:
+            self.by_parent[parent_hash].discard(oldest_hash)
+```
+
+### 17.10 Ban System
+
+#### 17.10.1 Misbehavior Scoring
+
+```python
+MISBEHAVIOR_THRESHOLD: int = 100        # Ban at this score
+BAN_DURATION_SEC: int = 86400           # 24 hours default
+BAN_DURATION_PERMANENT: int = -1        # Permanent ban
+
+# Penalty values for different violations
+class Penalty(IntEnum):
+    # Protocol violations
+    INVALID_MESSAGE = 10
+    UNKNOWN_MESSAGE = 1
+    OVERSIZED_MESSAGE = 20
+
+    # Block violations
+    INVALID_BLOCK_HEADER = 20
+    INVALID_BLOCK_FULL = 100            # Immediate ban
+    INVALID_POW = 100                   # Immediate ban (N/A for VDF)
+    INVALID_VDF = 100                   # Immediate ban
+
+    # Transaction violations
+    INVALID_TRANSACTION = 10
+    DOUBLE_SPEND_ATTEMPT = 50
+
+    # Heartbeat violations
+    INVALID_HEARTBEAT = 20
+    INVALID_ATOMIC_TIME = 30
+
+    # DoS attempts
+    ADDR_FLOOD = 20
+    INV_FLOOD = 20
+    GETDATA_FLOOD = 30
+    CONNECTION_FLOOD = 50
+```
+
+#### 17.10.2 Ban Manager
+
+```python
+@dataclass
+class BanEntry:
+    address: str                        # IP address or CIDR
+    banned_until: int                   # Unix timestamp (-1 = permanent)
+    reason: str
+    created_at: int
+
+class BanManager:
+    """Manage peer bans and misbehavior scores."""
+
+    bans: Dict[str, BanEntry]           # address -> ban entry
+    scores: Dict[str, int]              # peer_id -> misbehavior score
+
+    def misbehaving(
+        self,
+        peer: Peer,
+        penalty: int,
+        reason: str
+    ) -> bool:
+        """
+        Record misbehavior. Returns True if peer is now banned.
+        """
+        peer_id = peer.id
+        current = self.scores.get(peer_id, 0)
+        new_score = current + penalty
+        self.scores[peer_id] = new_score
+
+        log.warning(f"Peer {peer.address} misbehaving: {reason} "
+                    f"(+{penalty}, total={new_score})")
+
+        if new_score >= MISBEHAVIOR_THRESHOLD:
+            self.ban(peer.address, BAN_DURATION_SEC, reason)
+            return True
+
+        return False
+
+    def ban(
+        self,
+        address: str,
+        duration: int,
+        reason: str
+    ) -> None:
+        """Ban an address."""
+        now = int(time.time())
+        banned_until = -1 if duration == BAN_DURATION_PERMANENT else now + duration
+
+        self.bans[address] = BanEntry(
+            address=address,
+            banned_until=banned_until,
+            reason=reason,
+            created_at=now,
+        )
+
+        log.info(f"Banned {address} until {banned_until}: {reason}")
+
+    def is_banned(self, address: str) -> bool:
+        """Check if address is banned."""
+        if address not in self.bans:
+            return False
+
+        entry = self.bans[address]
+
+        # Permanent ban
+        if entry.banned_until == -1:
+            return True
+
+        # Check expiry
+        if int(time.time()) >= entry.banned_until:
+            del self.bans[address]
+            return False
+
+        return True
+
+    def unban(self, address: str) -> bool:
+        """Remove ban. Returns True if was banned."""
+        if address in self.bans:
+            del self.bans[address]
+            return True
+        return False
+
+    def clear_score(self, peer_id: str) -> None:
+        """Clear misbehavior score for peer."""
+        if peer_id in self.scores:
+            del self.scores[peer_id]
+
+# Ban storage schema (extends §25)
+BAN_SCHEMA = """
+CREATE TABLE bans (
+    address TEXT PRIMARY KEY,
+    banned_until INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+"""
+```
+
+### 17.11 Connection Management
+
+#### 17.11.1 Connection State
+
+```python
+class ConnectionState(IntEnum):
+    CONNECTING = 1                      # TCP connecting
+    HANDSHAKING = 2                     # Exchanging HELLO
+    CONNECTED = 3                       # Fully connected
+    DISCONNECTING = 4                   # Graceful disconnect
+
+@dataclass
+class PeerInfo:
+    """Information about connected peer."""
+    address: str
+    port: int
+    services: int
+    node_type: int
+    best_height: int
+    vdf_depth: int
+    user_agent: str
+    connected_at: int
+    is_outbound: bool
+
+    # Runtime stats
+    bytes_sent: int = 0
+    bytes_recv: int = 0
+    messages_sent: int = 0
+    messages_recv: int = 0
+    last_send: int = 0
+    last_recv: int = 0
+    ping_time_ms: int = 0
+```
+
+#### 17.11.2 Ping/Pong Keepalive
+
+```python
+PING_INTERVAL_SEC: int = 120            # Send ping every 2 minutes
+PING_TIMEOUT_SEC: int = 20              # Disconnect if no pong
+
+@dataclass
+class PingMessage:
+    nonce: int                          # u64 random nonce
+
+@dataclass
+class PongMessage:
+    nonce: int                          # u64 echo back nonce
+
+class PingManager:
+    """Manage ping/pong for connection liveness."""
+
+    pending_pings: Dict[str, Tuple[int, int]]  # peer_id -> (nonce, send_time)
+
+    async def ping_loop(self, peer: Peer) -> None:
+        """Background ping loop for a peer."""
+        while peer.state == ConnectionState.CONNECTED:
+            await asyncio.sleep(PING_INTERVAL_SEC)
+
+            # Send ping
+            nonce = random.getrandbits(64)
+            send_time = int(time.time() * 1000)
+            self.pending_pings[peer.id] = (nonce, send_time)
+
+            peer.send(Message(
+                type=MessageType.PING,
+                payload=PingMessage(nonce=nonce).serialize()
+            ))
+
+            # Wait for pong
+            await asyncio.sleep(PING_TIMEOUT_SEC)
+
+            if peer.id in self.pending_pings:
+                # No pong received
+                log.warning(f"Peer {peer.address} ping timeout")
+                peer.disconnect("ping timeout")
+
+    def handle_pong(self, peer: Peer, msg: PongMessage) -> None:
+        """Handle pong response."""
+        if peer.id not in self.pending_pings:
+            return
+
+        expected_nonce, send_time = self.pending_pings[peer.id]
+
+        if msg.nonce != expected_nonce:
+            peer.misbehaving(Penalty.INVALID_MESSAGE, "wrong pong nonce")
+            return
+
+        # Calculate ping time
+        ping_time = int(time.time() * 1000) - send_time
+        peer.info.ping_time_ms = ping_time
+
+        del self.pending_pings[peer.id]
+```
+
+#### 17.11.3 Outbound Peer Selection
+
+```python
+def select_outbound_peers(
+    known: List[PeerAddress],
+    connected: Set[str],
+    banned: BanManager,
+    target_count: int = MIN_OUTBOUND_CONNECTIONS
+) -> List[PeerAddress]:
+    """
+    Select peers for outbound connections.
+
+    Strategy:
+    1. Prefer recently seen peers
+    2. Diversify by /16 subnet (IPv4) or /32 (IPv6)
+    3. Prefer peers with services we need
+    4. Avoid already connected or banned
+    """
+    # Filter candidates
+    candidates = []
+    for addr in known:
+        if addr.ip in connected:
+            continue
+        if banned.is_banned(addr.ip):
+            continue
+        if not addr.is_valid():
+            continue
+        candidates.append(addr)
+
+    if not candidates:
+        return []
+
+    # Group by subnet
+    by_subnet: Dict[str, List[PeerAddress]] = {}
+    for addr in candidates:
+        subnet = get_subnet(addr.ip)
+        if subnet not in by_subnet:
+            by_subnet[subnet] = []
+        by_subnet[subnet].append(addr)
+
+    # Select one from each subnet, preferring recent
+    selected = []
+    subnets = list(by_subnet.keys())
+    random.shuffle(subnets)
+
+    for subnet in subnets:
+        if len(selected) >= target_count:
+            break
+
+        # Pick most recently seen from this subnet
+        peers = sorted(by_subnet[subnet],
+                      key=lambda p: p.last_seen, reverse=True)
+        selected.append(peers[0])
+
+    return selected
+
+def get_subnet(ip: str) -> str:
+    """Get /16 subnet for IPv4, /32 for IPv6."""
+    if ':' in ip:  # IPv6
+        parts = ip.split(':')
+        return ':'.join(parts[:2])
+    else:  # IPv4
+        parts = ip.split('.')
+        return '.'.join(parts[:2])
+```
+
+#### 17.11.4 Connection Limits
+
+```python
+# Connection limits
+MIN_OUTBOUND_CONNECTIONS: int = 8
+MAX_OUTBOUND_CONNECTIONS: int = 12
+MAX_INBOUND_CONNECTIONS: int = 125
+MAX_TOTAL_CONNECTIONS: int = MAX_OUTBOUND_CONNECTIONS + MAX_INBOUND_CONNECTIONS
+
+# Per-subnet limits (prevent Sybil)
+MAX_CONNECTIONS_PER_SUBNET: int = 2
+
+# Feeler connections (for address discovery)
+FEELER_INTERVAL_SEC: int = 120
+FEELER_TIMEOUT_SEC: int = 5
+
+class ConnectionManager:
+    """Manage peer connections."""
+
+    outbound: Dict[str, Peer]
+    inbound: Dict[str, Peer]
+
+    def can_accept_inbound(self, address: str) -> bool:
+        """Check if we can accept new inbound connection."""
+        if len(self.inbound) >= MAX_INBOUND_CONNECTIONS:
+            return False
+
+        # Check per-subnet limit
+        subnet = get_subnet(address)
+        subnet_count = sum(1 for p in self.inbound.values()
+                         if get_subnet(p.address) == subnet)
+        if subnet_count >= MAX_CONNECTIONS_PER_SUBNET:
+            return False
+
+        return True
+
+    def need_outbound(self) -> int:
+        """Return number of outbound connections needed."""
+        return max(0, MIN_OUTBOUND_CONNECTIONS - len(self.outbound))
 ```
 
 ---
@@ -2578,6 +3758,12 @@ VDF_OUTPUT_BYTES = 32
 VDF_BASE_ITERATIONS = 16777216
 VDF_MAX_ITERATIONS = 268435456
 VDF_STARK_CHECKPOINT_INTERVAL = 1000
+
+# STARK proof parameters (TARGETS — implementation pending)
+STARK_SECURITY_BITS = 128              # Target security level
+STARK_HASH_FUNCTION = "SHAKE256"
+# NOTE: Proof size and verification time TBD after implementation
+# Expected: O(log² T) proof size, O(log T) verification
 
 # ==============================================================================
 # LAYER 2: ACCUMULATED FINALITY

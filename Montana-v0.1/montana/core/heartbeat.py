@@ -1,0 +1,341 @@
+"""
+Ɉ Montana Heartbeat Structures v3.1
+
+Layer 1: Participation Heartbeats per MONTANA_TECHNICAL_SPECIFICATION.md §7.
+
+Heartbeats are the core participation mechanism:
+- FullHeartbeat: From Full Nodes, includes VDF proof (~17KB with signature)
+- LightHeartbeat: From Light Nodes, simpler structure (~17KB with signature)
+
+Both types contribute to score accumulation and lottery eligibility.
+"""
+
+from __future__ import annotations
+import time
+from dataclasses import dataclass, field
+from typing import Optional, Tuple
+
+from montana.constants import (
+    HASH_SIZE,
+    SPHINCS_SIGNATURE_SIZE,
+    VDF_BASE_ITERATIONS,
+)
+from montana.core.types import (
+    Hash,
+    PublicKey,
+    Signature,
+    NodeType,
+    ParticipationTier,
+    HeartbeatSource,
+)
+from montana.core.serialization import ByteReader, ByteWriter
+from montana.crypto.hash import sha3_256
+
+
+@dataclass
+class FullHeartbeat:
+    """
+    Full Node heartbeat per §7.2.
+
+    Includes VDF proof demonstrating continuous time passage.
+    Only Full Nodes (Type 1) can generate these.
+
+    Size: ~17,200 bytes (dominated by SPHINCS+ signature)
+    """
+    # Header (fixed size: 113 bytes)
+    version: int                      # Protocol version (1 byte)
+    node_type: NodeType              # Always FULL (1 byte)
+    timestamp_ms: int                 # UTC timestamp in milliseconds (8 bytes)
+    node_id: Hash                     # Node identifier (32 bytes)
+    prev_heartbeat_hash: Hash         # Previous heartbeat hash (32 bytes)
+    ntp_offset_ms: int                # NTP time offset (4 bytes, signed)
+    public_key: PublicKey             # Node's public key (33 bytes)
+
+    # VDF proof (variable, ~100-500 bytes)
+    vdf_input: Hash                   # VDF input (32 bytes)
+    vdf_output: Hash                  # VDF output (32 bytes)
+    vdf_iterations: int               # Number of iterations (8 bytes)
+    vdf_proof: bytes                  # STARK/checkpoint proof (variable)
+
+    # Signature
+    signature: Signature              # SPHINCS+ signature (17,089 bytes)
+
+    # Computed fields
+    _hash: Optional[Hash] = field(default=None, repr=False, compare=False)
+
+    @property
+    def source(self) -> HeartbeatSource:
+        return HeartbeatSource.FULL_NODE
+
+    @property
+    def tier(self) -> ParticipationTier:
+        return ParticipationTier.TIER_1
+
+    def hash(self) -> Hash:
+        """Compute heartbeat hash (cached)."""
+        if self._hash is None:
+            object.__setattr__(self, '_hash', sha3_256(self.serialize_for_signing()))
+        return self._hash
+
+    def serialize_for_signing(self) -> bytes:
+        """Serialize heartbeat data for signing (excludes signature)."""
+        w = ByteWriter()
+        w.write_u8(self.version)
+        w.write_u8(self.node_type)
+        w.write_u64(self.timestamp_ms)
+        w.write_raw(self.node_id.data)
+        w.write_raw(self.prev_heartbeat_hash.data)
+        w.write_i32(self.ntp_offset_ms)
+        w.write_raw(self.public_key.serialize())
+        w.write_raw(self.vdf_input.data)
+        w.write_raw(self.vdf_output.data)
+        w.write_u64(self.vdf_iterations)
+        w.write_bytes(self.vdf_proof)
+        return w.to_bytes()
+
+    def serialize(self) -> bytes:
+        """Serialize complete heartbeat including signature."""
+        w = ByteWriter()
+        w.write_raw(self.serialize_for_signing())
+        w.write_raw(self.signature.serialize())
+        return w.to_bytes()
+
+    @classmethod
+    def deserialize(cls, data: bytes) -> Tuple["FullHeartbeat", int]:
+        """Deserialize heartbeat from bytes."""
+        r = ByteReader(data)
+
+        version = r.read_u8()
+        node_type = NodeType(r.read_u8())
+        timestamp_ms = r.read_u64()
+        node_id = Hash(r.read_fixed_bytes(HASH_SIZE))
+        prev_heartbeat_hash = Hash(r.read_fixed_bytes(HASH_SIZE))
+        ntp_offset_ms = r.read_i32()
+
+        pk, _ = PublicKey.deserialize(data, r.offset)
+        r.offset += 33  # PublicKey size
+
+        vdf_input = Hash(r.read_fixed_bytes(HASH_SIZE))
+        vdf_output = Hash(r.read_fixed_bytes(HASH_SIZE))
+        vdf_iterations = r.read_u64()
+        vdf_proof = r.read_bytes()
+
+        sig, _ = Signature.deserialize(data, r.offset)
+        r.offset += 1 + SPHINCS_SIGNATURE_SIZE
+
+        heartbeat = cls(
+            version=version,
+            node_type=node_type,
+            timestamp_ms=timestamp_ms,
+            node_id=node_id,
+            prev_heartbeat_hash=prev_heartbeat_hash,
+            ntp_offset_ms=ntp_offset_ms,
+            public_key=pk,
+            vdf_input=vdf_input,
+            vdf_output=vdf_output,
+            vdf_iterations=vdf_iterations,
+            vdf_proof=vdf_proof,
+            signature=sig,
+        )
+
+        return heartbeat, r.offset
+
+
+@dataclass
+class LightHeartbeat:
+    """
+    Light Node heartbeat per §7.3.
+
+    Simpler structure without VDF proof.
+    Generated by Light Nodes (Type 2) or Telegram participants.
+
+    Size: ~17,150 bytes (dominated by SPHINCS+ signature)
+    """
+    # Header (fixed size: 109 bytes)
+    version: int                      # Protocol version (1 byte)
+    node_type: NodeType              # LIGHT or derived (1 byte)
+    source: HeartbeatSource          # Source type (1 byte)
+    timestamp_ms: int                 # UTC timestamp in milliseconds (8 bytes)
+    node_id: Hash                     # Node/user identifier (32 bytes)
+    prev_heartbeat_hash: Hash         # Previous heartbeat hash (32 bytes)
+    public_key: PublicKey             # Public key (33 bytes)
+
+    # Optional challenge response (for Telegram)
+    challenge_response: bytes = b""   # Time challenge answer (variable)
+
+    # Signature
+    signature: Signature = field(default_factory=Signature.empty)
+
+    # Computed fields
+    _hash: Optional[Hash] = field(default=None, repr=False, compare=False)
+
+    @property
+    def tier(self) -> ParticipationTier:
+        """Derive participation tier from source."""
+        return self.source.to_tier()
+
+    def hash(self) -> Hash:
+        """Compute heartbeat hash (cached)."""
+        if self._hash is None:
+            object.__setattr__(self, '_hash', sha3_256(self.serialize_for_signing()))
+        return self._hash
+
+    def serialize_for_signing(self) -> bytes:
+        """Serialize heartbeat data for signing (excludes signature)."""
+        w = ByteWriter()
+        w.write_u8(self.version)
+        w.write_u8(self.node_type)
+        w.write_u8(self.source)
+        w.write_u64(self.timestamp_ms)
+        w.write_raw(self.node_id.data)
+        w.write_raw(self.prev_heartbeat_hash.data)
+        w.write_raw(self.public_key.serialize())
+        w.write_bytes(self.challenge_response)
+        return w.to_bytes()
+
+    def serialize(self) -> bytes:
+        """Serialize complete heartbeat including signature."""
+        w = ByteWriter()
+        w.write_raw(self.serialize_for_signing())
+        w.write_raw(self.signature.serialize())
+        return w.to_bytes()
+
+    @classmethod
+    def deserialize(cls, data: bytes) -> Tuple["LightHeartbeat", int]:
+        """Deserialize heartbeat from bytes."""
+        r = ByteReader(data)
+
+        version = r.read_u8()
+        node_type = NodeType(r.read_u8())
+        source = HeartbeatSource(r.read_u8())
+        timestamp_ms = r.read_u64()
+        node_id = Hash(r.read_fixed_bytes(HASH_SIZE))
+        prev_heartbeat_hash = Hash(r.read_fixed_bytes(HASH_SIZE))
+
+        pk, _ = PublicKey.deserialize(data, r.offset)
+        r.offset += 33
+
+        challenge_response = r.read_bytes()
+
+        sig, _ = Signature.deserialize(data, r.offset)
+        r.offset += 1 + SPHINCS_SIGNATURE_SIZE
+
+        heartbeat = cls(
+            version=version,
+            node_type=node_type,
+            source=source,
+            timestamp_ms=timestamp_ms,
+            node_id=node_id,
+            prev_heartbeat_hash=prev_heartbeat_hash,
+            public_key=pk,
+            challenge_response=challenge_response,
+            signature=sig,
+        )
+
+        return heartbeat, r.offset
+
+
+# Type alias for any heartbeat
+Heartbeat = FullHeartbeat | LightHeartbeat
+
+
+def create_full_heartbeat(
+    node_id: Hash,
+    public_key: PublicKey,
+    prev_heartbeat_hash: Hash,
+    vdf_input: Hash,
+    vdf_output: Hash,
+    vdf_iterations: int,
+    vdf_proof: bytes,
+    ntp_offset_ms: int = 0,
+    version: int = 8,
+) -> FullHeartbeat:
+    """
+    Create a new Full Node heartbeat (unsigned).
+
+    The caller must sign the heartbeat before broadcasting.
+    """
+    from montana.constants import PROTOCOL_VERSION
+
+    return FullHeartbeat(
+        version=version or PROTOCOL_VERSION,
+        node_type=NodeType.FULL,
+        timestamp_ms=int(time.time() * 1000),
+        node_id=node_id,
+        prev_heartbeat_hash=prev_heartbeat_hash,
+        ntp_offset_ms=ntp_offset_ms,
+        public_key=public_key,
+        vdf_input=vdf_input,
+        vdf_output=vdf_output,
+        vdf_iterations=vdf_iterations,
+        vdf_proof=vdf_proof,
+        signature=Signature.empty(),
+    )
+
+
+def create_light_heartbeat(
+    node_id: Hash,
+    public_key: PublicKey,
+    prev_heartbeat_hash: Hash,
+    source: HeartbeatSource = HeartbeatSource.LIGHT_NODE,
+    challenge_response: bytes = b"",
+    version: int = 8,
+) -> LightHeartbeat:
+    """
+    Create a new Light Node heartbeat (unsigned).
+
+    The caller must sign the heartbeat before broadcasting.
+    """
+    from montana.constants import PROTOCOL_VERSION
+
+    node_type = NodeType.LIGHT
+    if source in (HeartbeatSource.TELEGRAM_BOT, HeartbeatSource.TELEGRAM_USER):
+        node_type = NodeType.LIGHT  # Telegram participants are treated as light nodes
+
+    return LightHeartbeat(
+        version=version or PROTOCOL_VERSION,
+        node_type=node_type,
+        source=source,
+        timestamp_ms=int(time.time() * 1000),
+        node_id=node_id,
+        prev_heartbeat_hash=prev_heartbeat_hash,
+        public_key=public_key,
+        challenge_response=challenge_response,
+        signature=Signature.empty(),
+    )
+
+
+def verify_heartbeat_signature(heartbeat: Heartbeat) -> bool:
+    """
+    Verify heartbeat signature.
+
+    Args:
+        heartbeat: Heartbeat to verify
+
+    Returns:
+        True if signature is valid
+    """
+    from montana.crypto.sphincs import sphincs_verify
+
+    message = heartbeat.serialize_for_signing()
+    return sphincs_verify(heartbeat.public_key, message, heartbeat.signature)
+
+
+def sign_heartbeat(heartbeat: Heartbeat, secret_key) -> Heartbeat:
+    """
+    Sign a heartbeat with the given secret key.
+
+    Args:
+        heartbeat: Heartbeat to sign
+        secret_key: SecretKey for signing
+
+    Returns:
+        New heartbeat with signature set
+    """
+    from montana.crypto.sphincs import sphincs_sign
+    from dataclasses import replace
+
+    message = heartbeat.serialize_for_signing()
+    signature = sphincs_sign(secret_key, message)
+
+    return replace(heartbeat, signature=signature, _hash=None)
