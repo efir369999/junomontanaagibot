@@ -1,21 +1,26 @@
 """
-Ɉ Montana Protocol Constants v3.4
+Ɉ Montana Protocol Constants v3.5
 
 All protocol constants per MONTANA_TECHNICAL_SPECIFICATION.md §19, §28.
 
-v3.4: UTC finality, ±5s tolerance, platform-independent light clients.
+v3.5: Timechain architecture, UTC finality, ±5s tolerance, platform-independent light clients.
 """
 
 from typing import Dict, List, Tuple
 
 # ==============================================================================
-# Ɉ MONTANA — MECHANISM FOR ASYMPTOTIC TRUST IN TIME VALUE
+# Ɉ MONTANA — TIMECHAIN: MECHANISM FOR ASYMPTOTIC TRUST IN TIME VALUE
 # ==============================================================================
 PROJECT: str = "Ɉ Montana"
 SYMBOL: str = "Ɉ"
 TICKER: str = "$MONT"
+ARCHITECTURE: str = "Timechain"
 DEFINITION: str = "lim(evidence → ∞) 1 Ɉ → 1 second"
 TYPE: str = "Temporal Time Unit"
+
+# Timechain vs Blockchain
+# Blockchain: chain of blocks, secured by work or stake
+# Timechain:  chain of time, secured by physics
 
 # ==============================================================================
 # SUPPLY
