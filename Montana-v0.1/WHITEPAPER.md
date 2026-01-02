@@ -341,15 +341,63 @@ All TTUs distributed through participation. No one starts with an advantage.
 | Tier | Participants | Node Type | Lottery Weight |
 |------|--------------|-----------|----------------|
 | **1** | Full Node operators | Full Node | **70%** |
-| **2** | Light Node operators OR TG Bot/Channel owners | Light Node | **20%** |
-| **3** | TG Community participants | — | **10%** |
+| **2** | Light Node operators OR Light Client owners | Light Node | **20%** |
+| **3** | Light Client users | — | **10%** |
 
 **Summary:**
-- Tier 1 (Full Node): **70%**
-- Tier 2 (Light Node): **20%**
-- Tier 3 (TG Users): **10%**
+- Tier 1 (Full Node): **70%** — network security
+- Tier 2 (Light Node / Light Client): **20%** — infrastructure scaling
+- Tier 3 (Light Client users): **10%** — mass adoption
 
-### 6.3 Heartbeat
+### 6.3 Light Clients and Mass Adoption
+
+Tier 2 and Tier 3 provide **barrier-free access** to time unit distribution through lightweight clients. Montana does not depend on any specific platform — it uses existing messaging and app platforms as distribution channels.
+
+**Supported Light Client Platforms:**
+
+| Platform | Type | Status |
+|----------|------|--------|
+| Telegram Bot | Messaging | Initial implementation |
+| Discord Bot | Messaging | Planned |
+| WeChat Mini Program | Messaging | Planned |
+| iOS App (App Store) | Mobile | Planned |
+| Android App (Google Play) | Mobile | Planned |
+| Web Application | Browser | Planned |
+
+**Design Principles:**
+
+1. **Platform Independence:** Montana protocol has no dependency on Telegram or any platform. Light clients are interchangeable interfaces to the same network.
+
+2. **Equal Conditions:** All participants compete on equal terms. The only arbiter is time — and time passes equally for everyone.
+
+3. **Safe Scaling:** Tier 2+3 receive only 30% of lottery weight combined. This allows millions of participants without risk of network influence.
+
+4. **No Sybil Advantage:** Creating multiple identities does not create more time. Each participant receives the same seconds per day regardless of account count.
+
+```
+Why 70/20/10 distribution?
+
+Full Nodes (70%):    Provide security, store history, compute VDF
+Light Nodes (20%):   Extend network reach, validate from connection
+Light Clients (10%): Mass adoption, zero barrier entry
+
+Security comes from Tier 1.
+Scale comes from Tier 2+3.
+```
+
+**Time as the Universal Equalizer:**
+
+```
+Billionaire with 1000 accounts:  24 hours/day
+Student with 1 account:          24 hours/day
+Server farm with 10000 bots:     24 hours/day
+
+No one can purchase more time.
+No one can accelerate time.
+Competition is healthy — the arbiter is physics.
+```
+
+### 6.4 Heartbeat
 
 A **heartbeat** proves temporal presence within a finality window:
 
@@ -363,7 +411,7 @@ Full Heartbeat (Tier 1):       Light Heartbeat (Tier 2/3):
 
 Heartbeats must arrive before UTC boundary to be included in finality checkpoint.
 
-### 6.4 Score
+### 6.5 Score
 
 ```
 Score = √(heartbeats)

@@ -74,11 +74,20 @@ Finality at UTC boundaries (00:00, 00:01, ...). No hardware advantage.
 | **Light Node** | From connection only | Tier 2 |
 
 **Tiers:**
-| Tier | Participants | Lottery |
-|------|--------------|---------|
-| **1** | Full Node operators | 70% |
-| **2** | Light Node / TG Bot owners | 20% |
-| **3** | TG Community users | 10% |
+| Tier | Participants | Lottery | Purpose |
+|------|--------------|---------|---------|
+| **1** | Full Node operators | 70% | Network security |
+| **2** | Light Node / Light Client owners | 20% | Infrastructure |
+| **3** | Light Client users | 10% | Mass adoption |
+
+**Light Client Platforms:**
+
+Montana has no dependency on any specific platform. Supported:
+- Telegram, Discord, WeChat (messaging)
+- iOS (App Store), Android (Google Play) (mobile)
+- Web Application (browser)
+
+Time passes equally for all. No platform provides advantage.
 
 ---
 

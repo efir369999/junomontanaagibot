@@ -29,7 +29,7 @@
 12. [Transaction Structure](#12-transaction-structure)
 13. [Transaction Fees](#13-transaction-fees)
 14. [Privacy Tiers](#14-privacy-tiers)
-15. [Telegram Bot Protocol](#15-telegram-bot-protocol)
+15. [Light Client Protocol](#15-light-client-protocol)
 16. [Cryptographic Primitives](#16-cryptographic-primitives)
 17. [Network Protocol](#17-network-protocol)
     - [17.4 Peer Discovery](#174-peer-discovery)
@@ -157,8 +157,8 @@ class ParticipationTier(IntEnum):
     Tier numbering: 1, 2, 3 (not 0, 1, 2)
     """
     TIER_1 = 1  # Full Node operators
-    TIER_2 = 2  # Light Node operators OR TG Bot/Community owners
-    TIER_3 = 3  # TG Community participants
+    TIER_2 = 2  # Light Node operators OR Light Client owners
+    TIER_3 = 3  # Light Client users (any platform)
 
 # Lottery probability weights
 TIER_WEIGHTS = {
@@ -168,18 +168,32 @@ TIER_WEIGHTS = {
 }
 ```
 
-| Tier | Participants | Node Type | Lottery Weight |
-|------|--------------|-----------|----------------|
-| **Tier 1** | Full Node operators | Full Node | **70%** |
-| **Tier 2** | Light Node operators OR TG Bot/Channel owners | Light Node | **20%** |
-| **Tier 3** | TG Community participants | — | **10%** |
+| Tier | Participants | Node Type | Lottery Weight | Purpose |
+|------|--------------|-----------|----------------|---------|
+| **Tier 1** | Full Node operators | Full Node | **70%** | Network security |
+| **Tier 2** | Light Node / Light Client owners | Light Node | **20%** | Infrastructure |
+| **Tier 3** | Light Client users | — | **10%** | Mass adoption |
 
 **Summary by Node Type:**
 | Node Type | Tiers | Total Lottery Weight |
 |-----------|-------|----------------------|
 | **Full Node** | Tier 1 | **70%** |
-| **Light Node** | Tier 2 | **20%** |
-| **TG Users** | Tier 3 | **10%** |
+| **Light Node / Light Client** | Tier 2+3 | **30%** |
+
+**Light Client Platforms:**
+
+Montana has **no dependency** on any specific platform. Light clients are interchangeable interfaces:
+
+| Platform | Type | Status |
+|----------|------|--------|
+| Telegram Bot | Messaging | Initial implementation |
+| Discord Bot | Messaging | Planned |
+| WeChat Mini Program | Messaging | Planned |
+| iOS App (App Store) | Mobile | Planned |
+| Android App (Google Play) | Mobile | Planned |
+| Web Application | Browser | Planned |
+
+**Design Principle:** Time passes equally for all participants regardless of platform. No platform provides competitive advantage. The only arbiter is physics.
 
 #### 1.3.3 Heartbeat Types
 
@@ -197,8 +211,8 @@ class LightHeartbeat:
     """Tier 2/3: Light heartbeat without VDF computation."""
     pubkey: PublicKey
     timestamp_ms: int                # Verified against VDF timeline
-    source: HeartbeatSource          # LIGHT_NODE, TG_BOT, TG_USER
-    community_id: Optional[str]      # Telegram chat ID (for TG sources)
+    source: HeartbeatSource          # LIGHT_NODE, LIGHT_CLIENT
+    platform_id: Optional[str]       # Platform-specific ID (any supported platform)
     signature: Signature             # SPHINCS+ (17,088 bytes)
 ```
 
@@ -207,12 +221,12 @@ class LightHeartbeat:
 | Requirement | Tier 1 | Tier 2 | Tier 3 |
 |-------------|--------|--------|--------|
 | Run Full Node | **Yes** | No | No |
-| Run Light Node | No | **Yes** (or TG Bot) | No |
+| Run Light Node | No | **Yes** (or Light Client) | No |
 | Download full history | **Yes** | No | No |
 | Store from connection | **Yes** | **Yes** | No |
 | VDF computation | **Yes** | No | No |
-| Own TG Bot/Channel | No | Optional | No |
-| Be in TG Community | No | No | **Yes** |
+| Own Light Client | No | Optional | No |
+| Use Light Client | No | No | **Yes** |
 | Montana wallet | **Yes** | **Yes** | **Yes** |
 | Heartbeat cooldown | 1/min | 1/min | 1/min |
 
@@ -1455,22 +1469,49 @@ def lsag_sign(
 
 ---
 
-## 15. Telegram Bot Protocol
+## 15. Light Client Protocol
 
-### 15.1 Bot Registration
+Montana supports multiple light client platforms for mass adoption. The protocol has **no dependency** on any specific platform — all platforms are interchangeable interfaces to the same network.
+
+### 15.0 Platform Independence
+
+```python
+# Supported light client platforms
+LIGHT_CLIENT_PLATFORMS = [
+    "telegram",      # Initial implementation
+    "discord",       # Planned
+    "wechat",        # Planned
+    "ios_app",       # App Store — Planned
+    "android_app",   # Google Play — Planned
+    "web_app",       # Browser — Planned
+]
+
+# All platforms use the same protocol
+# Time passes equally for all — no platform provides advantage
+```
+
+**Design Principles:**
+1. Platform-agnostic protocol
+2. Equal conditions for all participants
+3. Time as the only arbiter
+4. Safe scaling (Tier 2+3 = 30% combined)
+
+### 15.1 Light Client Registration
 
 ```python
 @dataclass
-class BotValidator:
-    bot_id: str                 # Telegram bot ID
+class LightClientValidator:
+    client_id: str              # Platform-specific client ID
+    platform: str               # Platform identifier (telegram, discord, etc.)
     owner_pubkey: PublicKey     # Owner's Montana pubkey
     registered_height: int      # Block height at registration
     user_count: int             # Active users
     validation_count: int       # Total validations
 
-class BotUser:
-    user_id: str                # Telegram user ID
-    bot_id: str                 # Which bot they use
+class LightClientUser:
+    user_id: str                # Platform-specific user ID
+    client_id: str              # Which light client they use
+    platform: str               # Platform identifier
     pubkey: PublicKey           # Montana pubkey
     frequency_seconds: int      # Validation frequency (60 - 86400)
     correct_answers: int

@@ -42,14 +42,30 @@ NODE_TYPES_TOTAL: int = 2                   # Exactly 2 node types in protocol
 # PARTICIPATION TIERS (3 tiers only, numbered 1-2-3)
 # ==============================================================================
 TIER_1: int = 1                             # Full Node operators
-TIER_2: int = 2                             # Light Node operators OR TG Bot/Channel owners
-TIER_3: int = 3                             # TG Community participants
+TIER_2: int = 2                             # Light Node operators OR Light Client owners
+TIER_3: int = 3                             # Light Client users (any platform)
 TIERS_TOTAL: int = 3                        # Exactly 3 tiers in protocol
 
 # Lottery probability by tier
-TIER_1_WEIGHT: float = 0.70                 # 70% → Full Node
-TIER_2_WEIGHT: float = 0.20                 # 20% → Light Node / TG Bot owners
-TIER_3_WEIGHT: float = 0.10                 # 10% → TG Community users
+# Security from Tier 1, scale from Tier 2+3
+TIER_1_WEIGHT: float = 0.70                 # 70% → Full Node (network security)
+TIER_2_WEIGHT: float = 0.20                 # 20% → Light Node / Light Client owners
+TIER_3_WEIGHT: float = 0.10                 # 10% → Light Client users (mass adoption)
+
+# ==============================================================================
+# LIGHT CLIENT PLATFORMS
+# ==============================================================================
+# Montana has NO dependency on any specific platform.
+# Light clients are interchangeable interfaces to the same network.
+# Time passes equally for all — no platform provides advantage.
+LIGHT_CLIENT_PLATFORMS: list = [
+    "telegram",      # Initial implementation
+    "discord",       # Planned
+    "wechat",        # Planned
+    "ios_app",       # App Store — Planned
+    "android_app",   # Google Play — Planned
+    "web_app",       # Browser — Planned
+]
 
 TIER_WEIGHTS: Dict[int, float] = {
     TIER_1: TIER_1_WEIGHT,
