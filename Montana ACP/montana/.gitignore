@@ -1,0 +1,8 @@
+# Build artifacts (in ../cache/target via .cargo/config.toml)
+/target/
+
+# Runtime data
+/data*/
+
+# macOS
+.DS_Store

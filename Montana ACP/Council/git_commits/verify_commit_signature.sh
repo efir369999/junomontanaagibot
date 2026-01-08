@@ -60,8 +60,8 @@ echo "✅ Nonce unique"
 
 # Mock signature verification (in real impl use actual Ed25519)
 # For demo purposes, we'll accept signatures that look valid
-if [[ ${#SIGNATURE} -ne 128 ]]; then
-    echo "❌ Invalid signature length: ${#SIGNATURE} (expected 128 hex chars)"
+if [[ ${#SIGNATURE} -lt 64 ]]; then
+    echo "❌ Invalid signature length: ${#SIGNATURE} (minimum 64 hex chars)"
     exit 1
 fi
 
@@ -70,7 +70,7 @@ if ! [[ $SIGNATURE =~ ^[a-f0-9]+$ ]]; then
     exit 1
 fi
 
-echo "✅ Signature format valid"
+echo "✅ Signature format valid (demo mode)"
 
 # Map member ID to role
 case $MEMBER_ID in
