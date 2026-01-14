@@ -26,7 +26,9 @@ NODES = {
 
 BOT_TOKEN = os.getenv("THOUGHTS_BOT_TOKEN", "")
 CHECK_INTERVAL = 5  # seconds
+SYNC_INTERVAL = 12  # seconds (breathing rhythm)
 TIMEOUT = 5  # seconds
+REPO_PATH = "/root/ACP_1"
 
 def get_my_node():
     """Determine which node we're running on."""
@@ -72,6 +74,25 @@ def is_local_bot_running() -> bool:
     result = subprocess.run("pgrep -f '[u]nified_bot.py'", shell=True, capture_output=True)
     return result.returncode == 0
 
+def sync_inhale(from_host: str) -> bool:
+    """Inhale: pull changes from higher priority node."""
+    try:
+        cmd = f"cd {REPO_PATH} && git fetch --all 2>/dev/null && git pull --rebase 2>/dev/null"
+        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=10)
+        return result.returncode == 0
+    except:
+        return False
+
+def sync_exhale(to_host: str) -> bool:
+    """Exhale: push changes to lower priority node."""
+    try:
+        # Push directly via SSH to the remote node's repo
+        cmd = f"cd {REPO_PATH} && git push 2>/dev/null"
+        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=10)
+        return result.returncode == 0
+    except:
+        return False
+
 def get_neighbors(my_priority: int) -> dict:
     """Get nodes before and after in priority chain."""
     sorted_nodes = sorted(NODES.items(), key=lambda x: x[1]["priority"])
@@ -108,7 +129,9 @@ def main():
     higher_names = [n for n, _ in higher_nodes] if higher_nodes else ["none"]
     print(f"[WATCHDOG] Node: {my_name} (priority {my_priority})")
     print(f"[WATCHDOG] Checking higher: {higher_names} | after: {after_name}")
-    print(f"[WATCHDOG] Interval: {CHECK_INTERVAL}s")
+    print(f"[WATCHDOG] Health: {CHECK_INTERVAL}s | Breath: {SYNC_INTERVAL}s")
+
+    last_sync = 0
 
     while True:
         try:
@@ -145,6 +168,23 @@ def main():
                 if not my_bot_running:
                     print(f"[WATCHDOG] No higher priority - TAKING OVER")
                     start_local_bot()
+
+            # === BREATHING: File sync every SYNC_INTERVAL ===
+            now = time.time()
+            if now - last_sync >= SYNC_INTERVAL:
+                breath = []
+
+                # Inhale: pull from any higher priority node
+                if higher_nodes:
+                    inhale_ok = sync_inhale(higher_nodes[0][1]["host"])
+                    breath.append(f"↓{'OK' if inhale_ok else 'SKIP'}")
+
+                # Exhale: push to git (reaches lower priority via remotes)
+                exhale_ok = sync_exhale("")
+                breath.append(f"↑{'OK' if exhale_ok else 'SKIP'}")
+
+                print(f"[BREATH] {' '.join(breath)}")
+                last_sync = now
 
         except Exception as e:
             print(f"[WATCHDOG] Error: {e}")
