@@ -851,7 +851,7 @@ Alejandro Montana
 |--------|-------|
 | **Сервер (Timeweb)** | `176.124.208.93` |
 | **SSH** | `ssh root@176.124.208.93` или `ssh my-timeweb` |
-| **Репо на сервере** | `/root/montana` |
+| **Репо на сервере** | `/root/ACP_1` |
 
 ---
 
@@ -885,7 +885,7 @@ git push origin main
 
 ```bash
 # После push в GitHub — синхронизировать все серверы
-ssh root@176.124.208.93 "cd /root/montana && git pull"
+ssh root@176.124.208.93 "cd /root/ACP_1 && git fetch origin main && git reset --hard origin/main"
 ```
 
 ### Формат комментариев коммитов
