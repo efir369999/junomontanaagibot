@@ -2804,10 +2804,11 @@ async def channel_sync_cycle(app):
 
     try:
         client = TelegramClient(str(SESSION_FILE), int(TELEGRAM_API_ID), TELEGRAM_API_HASH)
-        await client.start(phone=TELEGRAM_PHONE)
+        await client.connect()
 
         if not await client.is_user_authorized():
-            print("Channel sync: Not authorized")
+            print("Channel sync: Session not authorized (run auth separately)")
+            await client.disconnect()
             return
 
         me = await client.get_me()
