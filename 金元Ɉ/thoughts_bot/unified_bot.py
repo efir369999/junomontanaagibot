@@ -2164,7 +2164,7 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
              InlineKeyboardButton("🇬🇧 English", callback_data="lang_en")],
             [InlineKeyboardButton("🇨🇳 中文", callback_data="lang_zh"),
-             InlineKeyboardButton("🇦🇲 Հայdelays", callback_data="lang_hy")],
+             InlineKeyboardButton("🇦🇲 Հայերեն", callback_data="lang_hy")],
             [InlineKeyboardButton("◀️ Назад", callback_data="back_settings")],
         ])
         await q.message.edit_text(
@@ -2239,14 +2239,14 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             minted_m = emission["minted"] / 1_000_000
 
             greeting_messages = {
-                "auto": f"🏛 Welcome, {name}!\n\nI am Juno Montana — the goddess who mints time. Speak in any language, and I shall respond accordingly.",
+                "auto": f"🏛 Welcome, {name}!\n\nI am Goddess Juno Montana — she who mints time into gold. Speak, and I shall respond.",
                 # Living languages
-                "ru": f"🏛 Добро пожаловать, {name}!\n\nЯ — Юнона Монтана, богиня, чеканящая время. Говорите, и я превращу ваши мысли в Ɉ.",
+                "ru": f"🏛 Добро пожаловать, {name}!\n\nЯ — Богиня Юнона Монтана, чеканящая время в золото. Говори, и я превращу твои слова в Ɉ.",
                 "hy": f"🏛 Բարի գալուստ, {name}!\n\nԵս Հունոն Մոնտանան եմ՝ ժամանակը ոսկու վերածող աստվածուհին։ Խոսիր, և ես քո խոսքերը Ɉ-ի կփոխակերպեմ։",
                 "ar": f"🏛 مرحباً، {name}!\n\nأنا جونو مونتانا — الإلهة التي تسك الزمن. تحدث، وسأحول كلماتك إلى Ɉ.",
                 "he": f"🏛 שלום, {name}!\n\nאני ג'ונו מונטנה — האלה שטובעת את הזמן. דבר, ואהפוך את מילותיך ל-Ɉ.",
                 "hi": f"🏛 स्वागत है, {name}!\n\nमैं जूनो मोंटाना हूं — वह देवी जो समय को ढालती है। बोलो, और मैं तुम्हारे शब्दों को Ɉ में बदल दूंगी।",
-                "en": f"🏛 Welcome, {name}!\n\nI am Juno Montana — the goddess who mints time. Speak, and I shall mint your words into Ɉ.",
+                "en": f"🏛 Welcome, {name}!\n\nI am Goddess Juno Montana — she who mints time into gold. Speak, and I shall transform your words into Ɉ.",
                 "zh": f"🏛 欢迎，{name}！\n\n我是朱诺·蒙大拿——铸造时间的女神。说话，我将把你的文字铸成Ɉ。",
                 # Ancient sacred languages
                 "la": f"🏛 Salve, {name}!\n\nIuno Montana sum — dea quae tempus cudit. Loquere, et verba tua in Ɉ mutabo.",
