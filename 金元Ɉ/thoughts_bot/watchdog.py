@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-Montana Bot Watchdog — Mesh Failover
+Montana Watchdog — Central Brain Architecture
 
-Each node checks neighbors (before and after in priority chain).
-Priority: Amsterdam(1) → Moscow(2) → Almaty(3)
+One brain controls the network. If it dies, next becomes brain.
+Brain chain: Moscow → Almaty → SPB → Novosibirsk
+Bot chain:   Amsterdam → Almaty → SPB → Novosibirsk
+
+Brain monitors all, decides who runs bot, syncs files.
 """
 
 import os
@@ -11,191 +14,227 @@ import sys
 import time
 import subprocess
 import socket
-import requests
 from pathlib import Path
 
-# Unbuffered output
 sys.stdout.reconfigure(line_buffering=True)
 
-# Node configuration (sorted by priority)
-# Moscow = 0 (observer only, has other Juno bots - don't run Montana bot there)
-NODES = {
-    "amsterdam":   {"host": "72.56.102.240",  "priority": 1},
-    "moscow":      {"host": "176.124.208.93", "priority": 0},  # OBSERVER ONLY
-    "almaty":      {"host": "91.200.148.93",  "priority": 2},
-    "spb":         {"host": "188.225.58.98",  "priority": 3},
-    "novosibirsk": {"host": "147.45.147.247", "priority": 4},
-}
+# ═══════════════════════════════════════════════════════════════════════════════
+# NETWORK TOPOLOGY
+# ═══════════════════════════════════════════════════════════════════════════════
 
-BOT_TOKEN = os.getenv("THOUGHTS_BOT_TOKEN", "")
-CHECK_INTERVAL = 5  # seconds
-SYNC_INTERVAL = 12  # seconds (breathing rhythm)
-TIMEOUT = 5  # seconds
+# Brain chain (controllers) - who can be the central brain
+BRAIN_CHAIN = [
+    ("moscow",      "176.124.208.93"),
+    ("almaty",      "91.200.148.93"),
+    ("spb",         "188.225.58.98"),
+    ("novosibirsk", "147.45.147.247"),
+]
+
+# Bot chain (workers) - who can run the bot
+BOT_CHAIN = [
+    ("amsterdam",   "72.56.102.240"),
+    ("almaty",      "91.200.148.93"),
+    ("spb",         "188.225.58.98"),
+    ("novosibirsk", "147.45.147.247"),
+]
+
+CHECK_INTERVAL = 5   # seconds
+SYNC_INTERVAL = 12   # seconds (breathing)
 REPO_PATH = "/root/ACP_1"
+BOT_DIR = "/root/ACP_1/金元Ɉ/thoughts_bot"
 
-def get_my_node():
-    """Determine which node we're running on."""
-    hostname = socket.gethostname()
+# ═══════════════════════════════════════════════════════════════════════════════
+# HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_my_ip():
+    """Get this node's IP."""
     try:
-        my_ip = subprocess.check_output(
-            "hostname -I | awk '{print $1}'",
-            shell=True, text=True
+        return subprocess.check_output(
+            "hostname -I | awk '{print $1}'", shell=True, text=True
         ).strip()
     except:
-        my_ip = ""
+        return ""
 
-    for name, info in NODES.items():
-        if info["host"] in my_ip or name in hostname.lower():
-            return name, info
+def get_my_name():
+    """Determine which node we are."""
+    my_ip = get_my_ip()
+    hostname = socket.gethostname().lower()
+
+    all_nodes = {name: ip for name, ip in BRAIN_CHAIN + BOT_CHAIN}
+    for name, ip in all_nodes.items():
+        if ip in my_ip or name[:3] in hostname:
+            return name, ip
     return None, None
 
-def check_node_health(host: str) -> bool:
-    """Check if a node's bot is responding."""
+def is_node_alive(ip: str) -> bool:
+    """Check if node is reachable via SSH."""
     try:
-        cmd = f"ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no root@{host} \"pgrep -f '[u]nified_bot.py'\" 2>/dev/null"
-        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=TIMEOUT)
+        cmd = f"ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no root@{ip} 'echo ok' 2>/dev/null"
+        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=5)
         return result.returncode == 0
     except:
         return False
 
-def start_local_bot():
-    """Start the bot on this node."""
-    bot_dir = Path(__file__).parent
-    subprocess.run("pkill -9 -f unified_bot.py", shell=True, capture_output=True)
-    time.sleep(2)
-    cmd = f"cd {bot_dir} && nohup python3 -u unified_bot.py > /var/log/juno_bot.log 2>&1 &"
-    subprocess.run(cmd, shell=True)
-    print(f"[WATCHDOG] Started bot on this node")
+def is_bot_running_on(ip: str) -> bool:
+    """Check if bot is running on remote node."""
+    try:
+        cmd = f"ssh -o ConnectTimeout=3 root@{ip} \"pgrep -f '[u]nified_bot.py'\" 2>/dev/null"
+        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=5)
+        return result.returncode == 0
+    except:
+        return False
 
-def stop_local_bot():
-    """Stop the bot on this node."""
-    subprocess.run("pkill -9 -f unified_bot.py", shell=True, capture_output=True)
-    print(f"[WATCHDOG] Stopped local bot")
-
-def is_local_bot_running() -> bool:
+def is_bot_running_local() -> bool:
     """Check if bot is running locally."""
     result = subprocess.run("pgrep -f '[u]nified_bot.py'", shell=True, capture_output=True)
     return result.returncode == 0
 
-def sync_inhale(from_host: str) -> bool:
-    """Inhale: pull changes from higher priority node."""
+def start_bot_on(ip: str):
+    """Start bot on remote node."""
+    cmd = f"ssh root@{ip} 'pkill -9 -f unified_bot.py 2>/dev/null; sleep 2; cd {BOT_DIR} && nohup python3 -u unified_bot.py > /var/log/juno_bot.log 2>&1 &'"
+    subprocess.run(cmd, shell=True, capture_output=True)
+
+def stop_bot_on(ip: str):
+    """Stop bot on remote node."""
+    cmd = f"ssh root@{ip} 'pkill -9 -f unified_bot.py' 2>/dev/null"
+    subprocess.run(cmd, shell=True, capture_output=True)
+
+def start_bot_local():
+    """Start bot locally."""
+    subprocess.run("pkill -9 -f unified_bot.py", shell=True, capture_output=True)
+    time.sleep(2)
+    cmd = f"cd {BOT_DIR} && nohup python3 -u unified_bot.py > /var/log/juno_bot.log 2>&1 &"
+    subprocess.run(cmd, shell=True)
+
+def stop_bot_local():
+    """Stop bot locally."""
+    subprocess.run("pkill -9 -f unified_bot.py", shell=True, capture_output=True)
+
+def sync_pull():
+    """Inhale: git pull."""
     try:
-        cmd = f"cd {REPO_PATH} && git fetch --all 2>/dev/null && git pull --rebase 2>/dev/null"
-        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=10)
+        cmd = f"cd {REPO_PATH} && git pull origin main --rebase 2>/dev/null"
+        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=15)
         return result.returncode == 0
     except:
         return False
 
-def sync_exhale(to_host: str) -> bool:
-    """Exhale: push changes to lower priority node."""
+def sync_push():
+    """Exhale: git push."""
     try:
-        # Push directly via SSH to the remote node's repo
-        cmd = f"cd {REPO_PATH} && git push 2>/dev/null"
-        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=10)
+        cmd = f"cd {REPO_PATH} && git push origin main 2>/dev/null"
+        result = subprocess.run(cmd, shell=True, capture_output=True, timeout=15)
         return result.returncode == 0
     except:
         return False
 
-def get_neighbors(my_priority: int) -> dict:
-    """Get nodes before and after in priority chain."""
-    sorted_nodes = sorted(NODES.items(), key=lambda x: x[1]["priority"])
+# ═══════════════════════════════════════════════════════════════════════════════
+# BRAIN LOGIC
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    before = None  # Higher priority (lower number)
-    after = None   # Lower priority (higher number)
+def am_i_the_brain(my_name: str) -> bool:
+    """
+    Am I the current brain?
+    I'm the brain if all brains BEFORE me in chain are dead.
+    """
+    for name, ip in BRAIN_CHAIN:
+        if name == my_name:
+            return True  # Reached myself - I'm the brain
+        if is_node_alive(ip):
+            return False  # Someone before me is alive - they're the brain
+    return False
 
-    for i, (name, info) in enumerate(sorted_nodes):
-        if info["priority"] == my_priority:
-            if i > 0:
-                before = sorted_nodes[i-1]
-            if i < len(sorted_nodes) - 1:
-                after = sorted_nodes[i+1]
-            break
+def find_best_bot_node() -> tuple:
+    """Find the first alive node in bot chain."""
+    for name, ip in BOT_CHAIN:
+        if is_node_alive(ip):
+            return name, ip
+    return None, None
 
-    return {"before": before, "after": after}
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    my_name, my_info = get_my_node()
+    my_name, my_ip = get_my_name()
     if not my_name:
-        print("[WATCHDOG] Cannot determine which node I am. Exiting.")
+        print("[WATCHDOG] Unknown node. Exiting.")
         sys.exit(1)
 
-    my_priority = my_info["priority"]
+    # Am I in brain chain?
+    is_brain_candidate = any(name == my_name for name, _ in BRAIN_CHAIN)
+    # Am I in bot chain?
+    is_bot_candidate = any(name == my_name for name, _ in BOT_CHAIN)
 
-    # Get ALL higher priority nodes (exclude priority 0 = observers)
-    higher_nodes = [(n, i) for n, i in NODES.items() if 0 < i["priority"] < my_priority]
-    higher_nodes.sort(key=lambda x: x[1]["priority"])
-
-    # Get neighbor after me
-    neighbors = get_neighbors(my_priority)
-    after_name = neighbors["after"][0] if neighbors["after"] else "none"
-
-    higher_names = [n for n, _ in higher_nodes] if higher_nodes else ["none"]
-    print(f"[WATCHDOG] Node: {my_name} (priority {my_priority})")
-    print(f"[WATCHDOG] Checking higher: {higher_names} | after: {after_name}")
-    print(f"[WATCHDOG] Health: {CHECK_INTERVAL}s | Breath: {SYNC_INTERVAL}s")
+    print(f"[WATCHDOG] Node: {my_name} ({my_ip})")
+    print(f"[WATCHDOG] Brain candidate: {is_brain_candidate} | Bot candidate: {is_bot_candidate}")
+    print(f"[WATCHDOG] Check: {CHECK_INTERVAL}s | Sync: {SYNC_INTERVAL}s")
 
     last_sync = 0
 
     while True:
         try:
-            status = []
+            i_am_brain = am_i_the_brain(my_name) if is_brain_candidate else False
 
-            # Check ALL higher priority nodes
-            any_higher_active = False
-            for name, info in higher_nodes:
-                is_active = check_node_health(info["host"])
-                status.append(f"←{name}:{'UP' if is_active else 'DOWN'}")
-                if is_active:
-                    any_higher_active = True
+            if i_am_brain:
+                # ═══ BRAIN MODE ═══
+                # I control the network
 
-            # Check node AFTER me (lower priority) - just for monitoring
-            if neighbors["after"]:
-                name, info = neighbors["after"]
-                after_active = check_node_health(info["host"])
-                status.append(f"{name}→:{'UP' if after_active else 'DOWN'}")
+                # Find who should run the bot
+                best_name, best_ip = find_best_bot_node()
 
-            # My status
-            my_bot_running = is_local_bot_running()
-            status.append(f"[ME:{'RUN' if my_bot_running else 'STOP'}]")
+                # Check current bot status on all nodes
+                bot_status = []
+                current_bot_node = None
+                for name, ip in BOT_CHAIN:
+                    if is_bot_running_on(ip):
+                        bot_status.append(f"{name}:RUN")
+                        current_bot_node = name
+                    else:
+                        bot_status.append(f"{name}:STOP")
 
-            print(f"[WATCHDOG] {' | '.join(status)}")
+                print(f"[BRAIN] {' | '.join(bot_status)} | Best: {best_name}")
 
-            # Decision logic
-            if my_priority == 0:
-                # OBSERVER MODE - never run bot, only sync
-                if my_bot_running:
-                    print(f"[WATCHDOG] Observer mode - stopping bot")
-                    stop_local_bot()
-            elif any_higher_active:
-                # ANY higher priority node is active - I should NOT run
-                if my_bot_running:
-                    print(f"[WATCHDOG] Higher priority active - stopping")
-                    stop_local_bot()
+                # Ensure only the best node runs the bot
+                if best_name and current_bot_node != best_name:
+                    # Stop bot on wrong nodes
+                    for name, ip in BOT_CHAIN:
+                        if name != best_name and is_bot_running_on(ip):
+                            print(f"[BRAIN] Stopping bot on {name}")
+                            stop_bot_on(ip)
+
+                    # Start bot on best node
+                    if not is_bot_running_on(best_ip):
+                        print(f"[BRAIN] Starting bot on {best_name}")
+                        start_bot_on(best_ip)
+
             else:
-                # No higher priority node - I should run
-                if not my_bot_running:
-                    print(f"[WATCHDOG] No higher priority - TAKING OVER")
-                    start_local_bot()
+                # ═══ STANDBY MODE ═══
+                # Not the brain - just monitor and sync
 
-            # === BREATHING: File sync every SYNC_INTERVAL ===
+                # Find current brain
+                current_brain = "unknown"
+                for name, ip in BRAIN_CHAIN:
+                    if is_node_alive(ip):
+                        current_brain = name
+                        break
+
+                # Check if I should run the bot (if I'm in bot chain)
+                my_bot_running = is_bot_running_local() if is_bot_candidate else False
+
+                print(f"[STANDBY] Brain: {current_brain} | Me: {'BOT' if my_bot_running else 'IDLE'}")
+
+            # ═══ BREATHING (all nodes) ═══
             now = time.time()
             if now - last_sync >= SYNC_INTERVAL:
-                breath = []
-
-                # Inhale: pull from any higher priority node
-                if higher_nodes:
-                    inhale_ok = sync_inhale(higher_nodes[0][1]["host"])
-                    breath.append(f"↓{'OK' if inhale_ok else 'SKIP'}")
-
-                # Exhale: push to git (reaches lower priority via remotes)
-                exhale_ok = sync_exhale("")
-                breath.append(f"↑{'OK' if exhale_ok else 'SKIP'}")
-
-                print(f"[BREATH] {' '.join(breath)}")
+                pull_ok = sync_pull()
+                push_ok = sync_push()
+                print(f"[BREATH] ↓{'OK' if pull_ok else 'SKIP'} ↑{'OK' if push_ok else 'SKIP'}")
                 last_sync = now
 
         except Exception as e:
-            print(f"[WATCHDOG] Error: {e}")
+            print(f"[ERROR] {e}")
 
         time.sleep(CHECK_INTERVAL)
 
