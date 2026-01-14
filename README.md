@@ -58,9 +58,10 @@ lim(evidence → ∞) 1 Ɉ → 1 second
 |------|----------|------|
 | **Moscow** | 176.124.208.93 | Primary |
 | **Amsterdam** | 72.56.102.240 | Secondary |
+| **Almaty** | 91.200.148.93 | Tertiary |
 | **GitHub** | this repo | Backup |
 
-**Sync:** Continuous bidirectional (git + p2p)
+**Sync:** Full mesh (каждые 5 минут)
 
 ---
 
