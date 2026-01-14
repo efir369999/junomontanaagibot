@@ -15,6 +15,7 @@ MOSCOW="root@176.124.208.93"
 MOSCOW_DIR="/root/ACP_1"
 AMSTERDAM="root@72.56.102.240"
 AMSTERDAM_DIR="/root/ACP_1"
+GITHUB_REPO="git@github.com:efir369999/junomontanaagibot.git"
 
 EXCLUDE="--exclude=.git --exclude=*.pyc --exclude=__pycache__ --exclude=.DS_Store --exclude=venv/ --exclude=node_modules/ --exclude='Bitcoin Core*'"
 
