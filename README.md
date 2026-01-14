@@ -69,7 +69,23 @@ lim(evidence → ∞) 1 Ɉ → 1 second
 
 Telegram Control Node: [@junomontanaagibot](https://t.me/junomontanaagibot)
 
-- 25 commands
+**Mini App:** [efir369999.github.io/junomontanaagibot](https://efir369999.github.io/junomontanaagibot/)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      JUNO MINI APP                          │
+│              efir369999.github.io/junomontanaagibot         │
+│                                                             │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│   │ $0.1605/сек │  │  Священные  │  │   Статус    │        │
+│   │ Цена времени│  │   валюты    │  │    сети     │        │
+│   └─────────────┘  └─────────────┘  └─────────────┘        │
+│                                                             │
+│              Золото на чёрном | HTTPS | WebApp              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+- 26 commands + Mini App
 - Sacred languages of the World
 - Channel sync: @mylifethoughts369, @mylifeprogram369
 - Council of AI Safety (Claude, GPT, Gemini, Grok)
