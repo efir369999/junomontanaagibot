@@ -18,12 +18,13 @@ from pathlib import Path
 sys.stdout.reconfigure(line_buffering=True)
 
 # Node configuration (sorted by priority)
+# Moscow = 0 (observer only, has other Juno bots - don't run Montana bot there)
 NODES = {
     "amsterdam":   {"host": "72.56.102.240",  "priority": 1},
-    "moscow":      {"host": "176.124.208.93", "priority": 2},
-    "almaty":      {"host": "91.200.148.93",  "priority": 3},
-    "spb":         {"host": "188.225.58.98",  "priority": 4},
-    "novosibirsk": {"host": "147.45.147.247", "priority": 5},
+    "moscow":      {"host": "176.124.208.93", "priority": 0},  # OBSERVER ONLY
+    "almaty":      {"host": "91.200.148.93",  "priority": 2},
+    "spb":         {"host": "188.225.58.98",  "priority": 3},
+    "novosibirsk": {"host": "147.45.147.247", "priority": 4},
 }
 
 BOT_TOKEN = os.getenv("THOUGHTS_BOT_TOKEN", "")
@@ -120,8 +121,8 @@ def main():
 
     my_priority = my_info["priority"]
 
-    # Get ALL higher priority nodes
-    higher_nodes = [(n, i) for n, i in NODES.items() if i["priority"] < my_priority]
+    # Get ALL higher priority nodes (exclude priority 0 = observers)
+    higher_nodes = [(n, i) for n, i in NODES.items() if 0 < i["priority"] < my_priority]
     higher_nodes.sort(key=lambda x: x[1]["priority"])
 
     # Get neighbor after me
@@ -160,7 +161,12 @@ def main():
             print(f"[WATCHDOG] {' | '.join(status)}")
 
             # Decision logic
-            if any_higher_active:
+            if my_priority == 0:
+                # OBSERVER MODE - never run bot, only sync
+                if my_bot_running:
+                    print(f"[WATCHDOG] Observer mode - stopping bot")
+                    stop_local_bot()
+            elif any_higher_active:
                 # ANY higher priority node is active - I should NOT run
                 if my_bot_running:
                     print(f"[WATCHDOG] Higher priority active - stopping")
