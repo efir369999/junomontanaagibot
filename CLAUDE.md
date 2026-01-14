@@ -847,11 +847,21 @@ Alejandro Montana
 
 ## Инфраструктура
 
-| Ресурс | Адрес |
-|--------|-------|
-| **Сервер (Timeweb)** | `176.124.208.93` |
-| **SSH** | `ssh root@176.124.208.93` или `ssh my-timeweb` |
-| **Репо на сервере** | `/root/ACP_1` |
+| Узел | Адрес | SSH | Репо |
+|------|-------|-----|------|
+| **Москва (Timeweb)** | `176.124.208.93` | `ssh my-timeweb` | `/root/ACP_1` |
+| **Амстердам** | `72.56.102.240` | `ssh montana-ams` | `/root/ACP_1` |
+| **GitHub** | `github.com/efir369999/junomontanaagibot` | — | origin |
+
+### SSH публичные ключи узлов
+
+```
+# Москва (Timeweb)
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJ7eMoD9WibaEt69EKv1+81etijGFDT6Wez4YyjUO1pt root@5264781-cy33234
+
+# Амстердам
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFNvJWx19Rwrzy/Xow5Vnn6Um80Gg9PfU1WGvzrkBV6/ root@ams-1-vm-usln
+```
 
 ---
 
@@ -884,8 +894,16 @@ git push origin main
 ### Протокол синхронизации сети
 
 ```bash
-# После push в GitHub — синхронизировать все серверы
+# После push в GitHub — синхронизировать ВСЕ серверы
 ssh root@176.124.208.93 "cd /root/ACP_1 && git fetch origin main && git reset --hard origin/main"
+ssh root@72.56.102.240 "cd /root/ACP_1 && git fetch origin main && git reset --hard origin/main"
+```
+
+**Или одной командой:**
+```bash
+for srv in 176.124.208.93 72.56.102.240; do
+  ssh root@$srv "cd /root/ACP_1 && git fetch origin main && git reset --hard origin/main" &
+done; wait
 ```
 
 ### Формат комментариев коммитов
