@@ -1,92 +1,110 @@
-//! Montana Consensus Engine
+//! Montana Consensus Engine (Event-Driven)
 //!
-//! Интегрирует все слои:
-//! - consensus.rs — Lottery, Slice, Presence
-//! - types.rs — Structures
-//! - cooldown.rs — Adaptive Cooldown
-//! - crypto.rs — Cryptography
-//! - finality.rs — Checkpoints
-//! - fork_choice.rs — Chain selection
-//! - merkle.rs — Merkle proofs
+//! Architecture: Event-driven, не polling.
+//! Network.rs эмитит события → Engine обрабатывает.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tokio::time::{self, Duration, Instant};
 
 use crate::consensus::{
-    FullNodePresence, Lottery, Slice, SliceHeader, TAU1_SECS, TAU2_SECS, VerifiedUserPresence, NodeTier
+    FullNodePresence, Lottery, LotteryParticipant, LotteryResult,
+    NodeTier, Slice, SliceHeader, TAU1_SECS, TAU2_SECS,
 };
 use crate::cooldown::AdaptiveCooldown;
 use crate::crypto::Keypair;
-use crate::finality::FinalityTracker;
-use crate::fork_choice::{ForkChoice, ChainHead, ReorgResult};
+use crate::finality::{FinalityCheckpoint, FinalityTracker};
+use crate::fork_choice::{ChainHead, ForkChoice, ReorgResult};
 use crate::merkle::MerkleTree;
-use crate::net::Network;
-use crate::types::{Hash, NodeType, PublicKey, Signature, Transaction};
-use crate::consensus::LotteryParticipant;
+use crate::net::{NetEvent, Network};
+use crate::types::{Hash, NodeType, PresenceProof, PublicKey, Transaction};
 
-/// Конфигурация Montana node
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+/// Max presences per τ₂ (memory bound)
+const MAX_PRESENCES_PER_TAU2: usize = 100_000;
+
+/// Slice wait timeout (seconds)
+const SLICE_WAIT_TIMEOUT_SECS: u64 = 60;
+
+/// Backup slots per τ₂
+const BACKUP_SLOTS: u32 = 10;
+
+// ============================================================================
+// CONFIG
+// ============================================================================
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub node_type: NodeType,
     pub genesis_hash: Hash,
-    pub tau1_interval: Duration,
-    pub tau2_interval: Duration,
 }
 
-/// Main Montana node
-pub struct MontanaNode {
-    config: Config,
-    state: RwLock<NodeState>,
-    consensus: ConsensusEngine,
-    network: Arc<Network>,
-}
-
-// ============================================================================
-// TRAIT IMPLEMENTATIONS
-// ============================================================================
-
-
-impl MontanaNode {
-    pub fn new(config: Config, network: Arc<Network>) -> Self {
-        let consensus = ConsensusEngine::new(config.clone());
-        let state = RwLock::new(NodeState::Syncing { progress: 0.0 });
-
+impl Default for Config {
+    fn default() -> Self {
         Self {
-            config,
-            state,
-            consensus,
-            network,
+            node_type: NodeType::Full,
+            genesis_hash: [0u8; 32],
         }
     }
-
-    pub async fn start(&mut self) -> Result<(), MontanaError> {
-        self.consensus.start().await?;
-        *self.state.write().await = NodeState::Active;
-        Ok(())
-    }
-
-    pub async fn stop(&mut self) -> Result<(), MontanaError> {
-        self.consensus.stop().await?;
-        Ok(())
-    }
-
-    pub async fn state(&self) -> NodeState {
-        *self.state.read().await
-    }
 }
 
-/// Consensus Engine — Main Loop
+// ============================================================================
+// CONSENSUS ENGINE (Event-Driven)
+// ============================================================================
+
 pub struct ConsensusEngine {
     config: Config,
     keypair: Keypair,
     fork_choice: RwLock<ForkChoice>,
     finality: RwLock<FinalityTracker>,
     cooldown: RwLock<AdaptiveCooldown>,
+
+    // State
     current_tau2: RwLock<u64>,
-    running: RwLock<bool>,
-    lottery: RwLock<Option<Lottery>>,
+    presence_pool: RwLock<PresencePool>,
+    pending_slices: RwLock<Vec<Slice>>,
+}
+
+/// Bounded presence pool
+struct PresencePool {
+    presences: HashMap<[u8; 32], FullNodePresence>,
+    tau2_index: u64,
+}
+
+impl PresencePool {
+    fn new() -> Self {
+        Self {
+            presences: HashMap::new(),
+            tau2_index: 0,
+        }
+    }
+
+    fn add(&mut self, presence: FullNodePresence) -> bool {
+        if self.presences.len() >= MAX_PRESENCES_PER_TAU2 {
+            return false;
+        }
+        if presence.tau2_index != self.tau2_index {
+            return false;
+        }
+        self.presences.insert(presence.pubkey, presence);
+        true
+    }
+
+    fn clear_for_tau2(&mut self, tau2_index: u64) {
+        self.presences.clear();
+        self.tau2_index = tau2_index;
+    }
+
+    fn get_all(&self) -> Vec<FullNodePresence> {
+        self.presences.values().cloned().collect()
+    }
+
+    fn len(&self) -> usize {
+        self.presences.len()
+    }
 }
 
 impl ConsensusEngine {
@@ -97,163 +115,105 @@ impl ConsensusEngine {
 
         Self {
             config,
-            keypair: Keypair::generate(), // В реальности загружать из файла
+            keypair: Keypair::generate(),
             fork_choice: RwLock::new(fork_choice),
             finality: RwLock::new(finality),
             cooldown: RwLock::new(cooldown),
             current_tau2: RwLock::new(0),
-            running: RwLock::new(false),
-            lottery: RwLock::new(None),
+            presence_pool: RwLock::new(PresencePool::new()),
+            pending_slices: RwLock::new(Vec::new()),
         }
     }
 
-    /// Запустить основной консенсусный цикл
-    pub async fn start(&self) -> Result<(), MontanaError> {
-        let mut running = self.running.write().await;
-        if *running {
-            return Err(MontanaError::AlreadyRunning);
-        }
-        *running = true;
-        drop(running);
-
-        // TODO: Запустить main loop в фоне
-        // let engine = self as *const Self as *mut Self;
-        // tokio::spawn(async move {
-        //     (*engine).run().await;
-        // });
-
-        Ok(())
+    /// Load keypair from storage (production)
+    pub fn with_keypair(mut self, keypair: Keypair) -> Self {
+        self.keypair = keypair;
+        self
     }
 
-    /// Остановить движок
-    pub async fn stop(&self) -> Result<(), MontanaError> {
-        *self.running.write().await = false;
-        Ok(())
-    }
-
-    /// Main consensus loop (runs every τ₁)
-    pub async fn run(&self) {
-        let tau1_duration = Duration::from_secs(TAU1_SECS);
-
-        while *self.running.read().await {
-            let tau1_start = Instant::now();
-
-            // 1. Wait for next τ₁ boundary
-            self.wait_for_tau1().await;
-
-            // 2. Sign presence (if Full Node)
-            if matches!(self.config.node_type, NodeType::Full) {
-                if let Err(e) = self.sign_presence().await {
-                    eprintln!("Presence signing error: {:?}", e);
-                }
+    /// Main event handler
+    pub async fn handle_event(
+        &self,
+        event: NetEvent,
+        network: &Network,
+    ) -> Result<Option<EngineAction>, EngineError> {
+        match event {
+            // τ₁ tick: sign presence
+            NetEvent::Tau1Tick { tau1_index, network_time } => {
+                self.on_tau1_tick(tau1_index, network_time, network).await
             }
 
-            // 3. Check if τ₂ ended
-            if self.tau2_ended().await {
-                if let Err(e) = self.finalize_tau2().await {
-                    eprintln!("τ₂ finalization error: {:?}", e);
-                }
+            // τ₂ ended: run lottery
+            NetEvent::Tau2Ended { tau2_index, network_time } => {
+                self.on_tau2_ended(tau2_index, network_time, network).await
             }
 
-            // 4. Process incoming slices
-            if let Err(e) = self.process_pending_slices().await {
-                eprintln!("Slice processing error: {:?}", e);
+            // Received presence from peer
+            NetEvent::Presence(addr, presence) => {
+                self.on_presence_received(*presence).await
             }
 
-            // 5. Update finality
-            if let Err(e) = self.update_finality().await {
-                eprintln!("Finality update error: {:?}", e);
+            // Received slice from peer
+            NetEvent::Slice(addr, slice) => {
+                self.on_slice_received(*slice, network).await
             }
 
-            // Ждём до следующего τ₁
-            let elapsed = tau1_start.elapsed();
-            if elapsed < tau1_duration {
-                time::sleep(tau1_duration - elapsed).await;
+            // Finality update
+            NetEvent::FinalityUpdate { tau3_index, checkpoint_hash } => {
+                self.on_finality_update(tau3_index, checkpoint_hash).await
+            }
+
+            // P2P events (not consensus-critical)
+            NetEvent::PeerConnected(_) |
+            NetEvent::PeerDisconnected(_) |
+            NetEvent::Tx(_, _) |
+            NetEvent::NeedSlices(_, _, _) |
+            NetEvent::PeerAhead(_, _) => {
+                Ok(None)
             }
         }
     }
 
-    async fn wait_for_tau1(&self) {
-        // Синхронизируемся с τ₁ границей
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let tau1_boundary = (now / TAU1_SECS) * TAU1_SECS + TAU1_SECS;
-        let wait_time = tau1_boundary - now;
+    // ========================================================================
+    // EVENT HANDLERS
+    // ========================================================================
 
-        if wait_time > 0 {
-            time::sleep(Duration::from_secs(wait_time)).await;
+    async fn on_tau1_tick(
+        &self,
+        tau1_index: u64,
+        network_time: u64,
+        network: &Network,
+    ) -> Result<Option<EngineAction>, EngineError> {
+        if !matches!(self.config.node_type, NodeType::Full) {
+            return Ok(None);
         }
-    }
 
-    async fn sign_presence(&self) -> Result<(), MontanaError> {
         let current_tau2 = *self.current_tau2.read().await;
-        let pubkey_vec = self.keypair.public_key();
-        let mut pubkey_array = [0u8; 32];
-        pubkey_array.copy_from_slice(&pubkey_vec[..32]);
+        let presence = self.create_presence(current_tau2, network_time)?;
 
-        let presence = FullNodePresence {
-            pubkey: pubkey_array,
-            tau2_index: current_tau2,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            prev_slice_hash: [0u8; 32], // TODO
-            tier: 0, // FullNode
-            signature: vec![], // TODO: Реальная подпись
-        };
+        // Add to own pool
+        self.presence_pool.write().await.add(presence.clone());
 
-        // TODO: Отправить presence в сеть
-        println!("Signed presence for τ₂ {}", current_tau2);
+        // Broadcast to network
+        // network.broadcast_presence(&presence).await;
 
-        Ok(())
+        Ok(Some(EngineAction::PresenceSigned { tau2_index: current_tau2 }))
     }
 
-    async fn tau2_ended(&self) -> bool {
-        // Проверяем окончание τ₂ периода
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let current_tau2 = *self.current_tau2.read().await;
-        let tau2_end = (current_tau2 + 1) * TAU2_SECS;
-
-        now >= tau2_end
-    }
-
-    fn presence_to_participant(&self, presence: &FullNodePresence) -> LotteryParticipant {
-        // Конвертируем u8 tier в NodeTier
-        let node_tier = match presence.tier {
-            0 => NodeTier::FullNode,
-            1 => NodeTier::VerifiedUser,
-            _ => NodeTier::FullNode, // fallback
-        };
-
-        // TODO: Реальный расчёт веса на основе tier и истории
-        let weight = match node_tier {
-            NodeTier::FullNode => 1000,
-            NodeTier::VerifiedUser => 20000,
-        };
-
-        LotteryParticipant {
-            pubkey: presence.pubkey,
-            tier: node_tier,
-            weight,
-            presence_hash: crate::crypto::sha3(&presence.pubkey), // TODO: Реальный presence hash
+    async fn on_tau2_ended(
+        &self,
+        tau2_index: u64,
+        network_time: u64,
+        network: &Network,
+    ) -> Result<Option<EngineAction>, EngineError> {
+        let presences = self.presence_pool.read().await.get_all();
+        if presences.is_empty() {
+            return Err(EngineError::NoPresences);
         }
-    }
 
-    async fn finalize_tau2(&self) -> Result<(), MontanaError> {
-        let current_tau2 = *self.current_tau2.read().await;
-
-        // 1. Collect all presences (упрощённо)
-        let presences = self.collect_presences().await;
-
-        // 2. Run lottery
-        let prev_slice_hash = self.get_prev_slice_hash().await;
-        let mut lottery = Lottery::new(prev_slice_hash, current_tau2);
+        // Run lottery
+        let prev_hash = self.get_prev_slice_hash().await;
+        let mut lottery = Lottery::new(prev_hash, tau2_index);
 
         for presence in &presences {
             let participant = self.presence_to_participant(presence);
@@ -261,103 +221,67 @@ impl ConsensusEngine {
         }
 
         let result = lottery.run();
+        let winner_pubkey = result.winners[0].pubkey;
 
-        // 3. If we won, produce slice
-        let our_pubkey_vec = self.keypair.public_key();
-        let mut our_pubkey_array = [0u8; 32];
-        our_pubkey_array.copy_from_slice(&our_pubkey_vec[..32]);
+        // Check if we won
+        let our_pubkey = self.get_our_pubkey();
+        if winner_pubkey == our_pubkey {
+            let slice = self.produce_slice(presences, result, tau2_index).await?;
+            // network.broadcast_slice(&slice).await;
 
-        if result.winners[0].pubkey == our_pubkey_array {
-            let slice = self.produce_slice(presences, result.clone()).await?;
-            self.broadcast_slice(slice).await?;
+            // Prepare for next τ₂
+            self.presence_pool.write().await.clear_for_tau2(tau2_index + 1);
+            *self.current_tau2.write().await = tau2_index + 1;
+
+            return Ok(Some(EngineAction::LotteryWon {
+                tau2_index,
+                slice_hash: slice.header.hash(),
+            }));
         }
 
-        // 4. Wait for slice from winner (упрощённо)
-        let winner_pubkey = result.winners[0].pubkey.clone();
-        let slice = self.wait_for_slice(winner_pubkey.to_vec()).await?;
+        // Prepare for next τ₂
+        self.presence_pool.write().await.clear_for_tau2(tau2_index + 1);
+        *self.current_tau2.write().await = tau2_index + 1;
 
-        // 5. Verify and apply
-        self.verify_and_apply_slice(slice).await?;
-
-        // Обновляем τ₂
-        *self.current_tau2.write().await += 1;
-
-        Ok(())
+        Ok(Some(EngineAction::WaitingForSlice {
+            tau2_index,
+            winner: winner_pubkey,
+        }))
     }
 
-    async fn collect_presences(&self) -> Vec<FullNodePresence> {
-        // TODO: Реальный сбор presence из сети
-        vec![]
-    }
-
-    async fn get_prev_slice_hash(&self) -> Hash {
-        // TODO: Получить хеш предыдущего слайса
-        [0u8; 32]
-    }
-
-    async fn produce_slice(&self, presences: Vec<FullNodePresence>, lottery_result: crate::consensus::LotteryResult)
-        -> Result<Slice, MontanaError>
-    {
-        let current_tau2 = *self.current_tau2.read().await;
-        let prev_hash = self.get_prev_slice_hash().await;
-
-        // Создаём Merkle tree для presence
-        let presence_hashes: Vec<Hash> = presences.iter()
-            .map(|p| self.hash_presence(p))
-            .collect();
-        let presence_tree = MerkleTree::new(presence_hashes);
-        let presence_root = presence_tree.root();
-
-        // Создаём header
-        let header = SliceHeader {
-            version: 1,
-            height: current_tau2,
-            tau2_index: current_tau2,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            prev_slice_hash: prev_hash,
-            presence_root,
-            tx_root: [0u8; 32], // TODO: transactions
-            producer_pubkey: {
-                let pubkey_vec = self.keypair.public_key();
-                let mut pubkey_array = [0u8; 32];
-                pubkey_array.copy_from_slice(&pubkey_vec[..32]);
-                pubkey_array
-            },
-            lottery_ticket: [0u8; 32], // TODO: lottery ticket
-            slot: 0,
-            finality_checkpoint: None,
+    async fn on_presence_received(
+        &self,
+        presence: PresenceProof,
+    ) -> Result<Option<EngineAction>, EngineError> {
+        // Convert PresenceProof to FullNodePresence
+        let full_presence = FullNodePresence {
+            pubkey: presence.pubkey,
+            tau2_index: presence.tau2_index,
+            timestamp: presence.timestamp,
+            prev_slice_hash: presence.prev_slice_hash,
+            tier: 0, // FullNode
+            signature: presence.signature,
         };
 
-        Ok(Slice {
-            header,
-            full_node_presences: presences,
-            verified_user_presences: vec![], // TODO
-            transactions: vec![], // TODO
-            producer_signature: vec![], // TODO
-            attestations: vec![],
-        })
+        let added = self.presence_pool.write().await.add(full_presence);
+        if added {
+            Ok(Some(EngineAction::PresenceAccepted {
+                pubkey: presence.pubkey,
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
-    async fn broadcast_slice(&self, slice: Slice) -> Result<(), MontanaError> {
-        // TODO: Отправить слайс в сеть
-        println!("Broadcasting slice {}", slice.header.height);
-        Ok(())
-    }
-
-    async fn wait_for_slice(&self, winner_pubkey: PublicKey) -> Result<Slice, MontanaError> {
-        // TODO: Реальное ожидание слайса
-        // Пока возвращаем mock
-        Err(MontanaError::SliceTimeout)
-    }
-
-    async fn verify_and_apply_slice(&self, slice: Slice) -> Result<(), MontanaError> {
-        // Верифицируем слайс
+    async fn on_slice_received(
+        &self,
+        slice: Slice,
+        network: &Network,
+    ) -> Result<Option<EngineAction>, EngineError> {
+        // Verify slice
         self.verify_slice(&slice).await?;
 
-        // Добавляем в fork choice
+        // Add to fork choice
         let head = ChainHead::from_slice_header(
             slice.header.hash(),
             slice.header.height,
@@ -365,168 +289,288 @@ impl ConsensusEngine {
             self.calculate_slice_weight(&slice),
         );
 
-        self.fork_choice.write().await.add_head(head.clone())?;
+        let mut fc = self.fork_choice.write().await;
+        fc.add_head(head.clone())?;
 
-        // Проверяем reorg
-        if self.fork_choice.write().await.should_reorg(&head) {
-            let result = self.fork_choice.write().await.reorg_to(head)?;
+        // Check for reorg
+        if fc.should_reorg(&head) {
+            let result = fc.reorg_to(head.clone())?;
+            drop(fc);
             self.handle_reorg(result).await?;
+
+            return Ok(Some(EngineAction::Reorg {
+                new_head: head.hash,
+                depth: 1,
+            }));
+        }
+
+        Ok(Some(EngineAction::SliceAccepted {
+            hash: slice.header.hash(),
+            height: slice.header.height,
+        }))
+    }
+
+    async fn on_finality_update(
+        &self,
+        tau3_index: u64,
+        checkpoint_hash: [u8; 32],
+    ) -> Result<Option<EngineAction>, EngineError> {
+        // Update finality tracker
+        let checkpoint = FinalityCheckpoint {
+            tau3_index,
+            checkpoint_hash,
+            attestations: vec![],
+            total_weight: 0,
+        };
+
+        self.finality.write().await.add_checkpoint(checkpoint)?;
+
+        Ok(Some(EngineAction::CheckpointFinalized { tau3_index }))
+    }
+
+    // ========================================================================
+    // HELPERS
+    // ========================================================================
+
+    fn create_presence(
+        &self,
+        tau2_index: u64,
+        timestamp: u64,
+    ) -> Result<FullNodePresence, EngineError> {
+        let pubkey = self.get_our_pubkey();
+        let prev_hash = [0u8; 32]; // TODO: get from fork_choice
+
+        let presence = FullNodePresence {
+            pubkey,
+            tau2_index,
+            timestamp,
+            prev_slice_hash: prev_hash,
+            tier: 0,
+            signature: vec![], // TODO: sign with keypair
+        };
+
+        Ok(presence)
+    }
+
+    fn get_our_pubkey(&self) -> [u8; 32] {
+        let pubkey_vec = self.keypair.public_key();
+        let mut pubkey_array = [0u8; 32];
+        pubkey_array.copy_from_slice(&pubkey_vec[..32.min(pubkey_vec.len())]);
+        pubkey_array
+    }
+
+    async fn get_prev_slice_hash(&self) -> Hash {
+        self.fork_choice.read().await
+            .best_head()
+            .map(|h| h.hash)
+            .unwrap_or([0u8; 32])
+    }
+
+    fn presence_to_participant(&self, presence: &FullNodePresence) -> LotteryParticipant {
+        let tier = match presence.tier {
+            0 => NodeTier::FullNode,
+            _ => NodeTier::VerifiedUser,
+        };
+
+        let weight = match tier {
+            NodeTier::FullNode => 1000,
+            NodeTier::VerifiedUser => 20000,
+        };
+
+        LotteryParticipant {
+            pubkey: presence.pubkey,
+            tier,
+            weight,
+            presence_hash: crate::crypto::sha3(&presence.pubkey),
+        }
+    }
+
+    async fn produce_slice(
+        &self,
+        presences: Vec<FullNodePresence>,
+        lottery_result: LotteryResult,
+        tau2_index: u64,
+    ) -> Result<Slice, EngineError> {
+        let prev_hash = self.get_prev_slice_hash().await;
+
+        // Merkle tree for presences
+        let presence_hashes: Vec<Hash> = presences.iter()
+            .map(|p| crate::crypto::sha3(&p.pubkey))
+            .collect();
+        let presence_tree = MerkleTree::new(presence_hashes);
+        let presence_root = presence_tree.root();
+
+        let header = SliceHeader {
+            version: 1,
+            height: tau2_index,
+            tau2_index,
+            timestamp: crate::types::now(),
+            prev_slice_hash: prev_hash,
+            presence_root,
+            tx_root: [0u8; 32],
+            producer_pubkey: self.get_our_pubkey(),
+            lottery_ticket: lottery_result.ticket,
+            slot: 0,
+            finality_checkpoint: None,
+        };
+
+        Ok(Slice {
+            header,
+            full_node_presences: presences,
+            verified_user_presences: vec![],
+            transactions: vec![],
+            producer_signature: vec![], // TODO: sign
+            attestations: vec![],
+        })
+    }
+
+    async fn verify_slice(&self, slice: &Slice) -> Result<(), EngineError> {
+        // Verify lottery winner
+        let prev_hash = slice.header.prev_slice_hash;
+        let mut lottery = Lottery::new(prev_hash, slice.header.tau2_index);
+
+        for presence in &slice.full_node_presences {
+            let participant = self.presence_to_participant(presence);
+            lottery.add_participant(participant);
+        }
+
+        let result = lottery.run();
+        if result.winners[0].pubkey != slice.header.producer_pubkey {
+            return Err(EngineError::InvalidLotteryWinner);
+        }
+
+        // Verify presence root
+        let presence_hashes: Vec<Hash> = slice.full_node_presences.iter()
+            .map(|p| crate::crypto::sha3(&p.pubkey))
+            .collect();
+        let presence_tree = MerkleTree::new(presence_hashes);
+        if presence_tree.root() != slice.header.presence_root {
+            return Err(EngineError::InvalidPresenceRoot);
         }
 
         Ok(())
     }
 
-    async fn verify_slice(&self, slice: &Slice) -> Result<(), MontanaError> {
-        // TODO: Полная верификация слайса
-        // - Проверка lottery winner
-        // - Проверка presence root
-        // - Проверка подписей
-        Ok(())
-    }
-
     fn calculate_slice_weight(&self, slice: &Slice) -> u64 {
-        // Вес слайса = сумма весов presence
-        slice.full_node_presences.iter()
-            .map(|p| 1000) // TODO: Реальный расчёт веса
-            .sum()
+        slice.full_node_presences.len() as u64 * 1000
     }
 
-    async fn handle_reorg(&self, result: ReorgResult) -> Result<(), MontanaError> {
-        // TODO: Обработка reorg - обновление mempool, etc.
-        println!("Reorg: {} orphaned, {} adopted, depth {}",
-                result.orphaned.len(), result.adopted.len(), result.depth);
+    async fn handle_reorg(&self, result: ReorgResult) -> Result<(), EngineError> {
+        // TODO: Update mempool, return orphaned txs
         Ok(())
-    }
-
-    async fn process_pending_slices(&self) -> Result<(), MontanaError> {
-        // TODO: Обработка входящих слайсов из сети
-        Ok(())
-    }
-
-    async fn update_finality(&self) -> Result<(), MontanaError> {
-        // TODO: Обновление финальности для новых слайсов
-        Ok(())
-    }
-
-    fn hash_presence(&self, presence: &FullNodePresence) -> Hash {
-        // TODO: Реальный хеш presence
-        [0u8; 32]
     }
 }
 
-/// Состояние ноды
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum NodeState {
-    /// Синхронизация с сетью
-    Syncing { progress: f64 },
-    /// Активное участие в консенсусе
-    Active,
-    /// В cooldown периоде
-    Cooldown { until_tau2: u64 },
-    /// Офлайн
-    Offline,
-}
+// ============================================================================
+// ACTIONS (output from engine)
+// ============================================================================
 
-/// События консенсуса
 #[derive(Debug)]
-pub enum ConsensusEvent {
-    /// Новый слайс принят
+pub enum EngineAction {
+    PresenceSigned { tau2_index: u64 },
+    PresenceAccepted { pubkey: [u8; 32] },
+    LotteryWon { tau2_index: u64, slice_hash: Hash },
+    WaitingForSlice { tau2_index: u64, winner: [u8; 32] },
     SliceAccepted { hash: Hash, height: u64 },
-    /// Произошла реорганизация
-    Reorg { depth: u32, new_head: Hash },
-    /// Checkpoint финализирован
+    Reorg { new_head: Hash, depth: u32 },
     CheckpointFinalized { tau3_index: u64 },
-    /// Мы выиграли лотерею
-    LotteryWon { tau2_index: u64, slot: u32 },
-    /// Cooldown начался
-    CooldownStarted { until_tau2: u64 },
 }
 
-/// Listener для событий консенсуса
-pub trait ConsensusListener: Send + Sync {
-    fn on_event(&mut self, event: ConsensusEvent);
-}
+// ============================================================================
+// ERRORS
+// ============================================================================
 
-/// Ошибки Montana
 #[derive(Debug, thiserror::Error)]
-pub enum MontanaError {
-    #[error("Consensus error: {0}")]
-    Consensus(String),
-
-    #[error("Network error: {0}")]
-    Network(String),
-
-    #[error("Storage error: {0}")]
-    Storage(String),
-
-    #[error("Crypto error: {0}")]
-    Crypto(String),
-
-    #[error("Invalid configuration: {0}")]
-    Config(String),
-
-    #[error("Fork choice error: {0}")]
+pub enum EngineError {
+    #[error("no presences collected")]
+    NoPresences,
+    #[error("invalid lottery winner")]
+    InvalidLotteryWinner,
+    #[error("invalid presence root")]
+    InvalidPresenceRoot,
+    #[error("fork choice error: {0}")]
     ForkChoice(#[from] crate::fork_choice::ForkChoiceError),
-
-    #[error("Finality error: {0}")]
+    #[error("finality error: {0}")]
     Finality(#[from] crate::finality::FinalityError),
-
-    #[error("Already running")]
-    AlreadyRunning,
-
-    #[error("Slice timeout")]
+    #[error("slice timeout")]
     SliceTimeout,
 }
+
+// ============================================================================
+// TESTS
+// ============================================================================
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
-    #[tokio::test]
-    async fn test_node_creation() {
-        let config = Config {
-            node_type: NodeType::Full,
-            genesis_hash: [0u8; 32],
-            tau1_interval: Duration::from_secs(60),
-            tau2_interval: Duration::from_secs(600),
+    #[test]
+    fn test_presence_pool_bounds() {
+        let mut pool = PresencePool::new();
+        pool.tau2_index = 1;
+
+        for i in 0..MAX_PRESENCES_PER_TAU2 {
+            let presence = FullNodePresence {
+                pubkey: {
+                    let mut pk = [0u8; 32];
+                    pk[0] = (i % 256) as u8;
+                    pk[1] = ((i / 256) % 256) as u8;
+                    pk
+                },
+                tau2_index: 1,
+                timestamp: 0,
+                prev_slice_hash: [0u8; 32],
+                tier: 0,
+                signature: vec![],
+            };
+            assert!(pool.add(presence));
+        }
+
+        // Pool is full
+        let overflow = FullNodePresence {
+            pubkey: [0xff; 32],
+            tau2_index: 1,
+            timestamp: 0,
+            prev_slice_hash: [0u8; 32],
+            tier: 0,
+            signature: vec![],
         };
+        assert!(!pool.add(overflow));
+        assert_eq!(pool.len(), MAX_PRESENCES_PER_TAU2);
+    }
 
-        let network = Arc::new(Network::new(crate::net::NetConfig::default()));
-        let node = MontanaNode::new(config, network);
+    #[test]
+    fn test_presence_pool_tau2_filter() {
+        let mut pool = PresencePool::new();
+        pool.tau2_index = 5;
 
-        assert!(matches!(node.state().await, NodeState::Syncing { .. }));
+        // Wrong tau2_index rejected
+        let wrong_tau2 = FullNodePresence {
+            pubkey: [1u8; 32],
+            tau2_index: 4,
+            timestamp: 0,
+            prev_slice_hash: [0u8; 32],
+            tier: 0,
+            signature: vec![],
+        };
+        assert!(!pool.add(wrong_tau2));
+
+        // Correct tau2_index accepted
+        let correct_tau2 = FullNodePresence {
+            pubkey: [2u8; 32],
+            tau2_index: 5,
+            timestamp: 0,
+            prev_slice_hash: [0u8; 32],
+            tier: 0,
+            signature: vec![],
+        };
+        assert!(pool.add(correct_tau2));
     }
 
     #[tokio::test]
     async fn test_engine_creation() {
-        let config = Config {
-            node_type: NodeType::Full,
-            genesis_hash: [0u8; 32],
-            tau1_interval: Duration::from_secs(60),
-            tau2_interval: Duration::from_secs(600),
-        };
-
+        let config = Config::default();
         let engine = ConsensusEngine::new(config);
-        assert_eq!(engine.config.node_type, NodeType::Full);
-    }
-
-    #[tokio::test]
-    async fn test_tau2_boundary_detection() {
-        let config = Config {
-            node_type: NodeType::Full,
-            genesis_hash: [0u8; 32],
-            tau1_interval: Duration::from_secs(60),
-            tau2_interval: Duration::from_secs(600),
-        };
-
-        let engine = ConsensusEngine::new(config);
-
-        // Начало τ₂ = 0, конец = 600
-        assert!(!engine.tau2_ended().await);
-
-        // Имитируем время после конца τ₂
-        *engine.current_tau2.write().await = 0;
-        // TODO: Mock time source для тестирования
+        assert_eq!(*engine.current_tau2.read().await, 0);
     }
 }

@@ -129,6 +129,7 @@ pub enum NetError {
 /// Network event for main loop
 #[derive(Debug)]
 pub enum NetEvent {
+    // === P2P Events ===
     /// New peer connected
     PeerConnected(SocketAddr),
     /// Peer disconnected
@@ -143,6 +144,23 @@ pub enum NetEvent {
     NeedSlices(SocketAddr, u64, u64),
     /// Peer has newer slices
     PeerAhead(SocketAddr, u64),
+
+    // === Consensus Events ===
+    /// τ₁ boundary reached (every 60 seconds)
+    Tau1Tick {
+        tau1_index: u64,
+        network_time: u64,
+    },
+    /// τ₂ period ended (every 600 seconds)
+    Tau2Ended {
+        tau2_index: u64,
+        network_time: u64,
+    },
+    /// Finality checkpoint update
+    FinalityUpdate {
+        tau3_index: u64,
+        checkpoint_hash: [u8; 32],
+    },
 }
 
 /// Network configuration
