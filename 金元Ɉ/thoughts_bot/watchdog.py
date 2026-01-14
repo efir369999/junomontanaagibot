@@ -14,6 +14,9 @@ import socket
 import requests
 from pathlib import Path
 
+# Unbuffered output
+sys.stdout.reconfigure(line_buffering=True)
+
 # Node configuration
 NODES = {
     "amsterdam": {"host": "72.56.102.240", "priority": 1},
