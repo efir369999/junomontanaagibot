@@ -34,12 +34,26 @@ from telegram.ext import (
 )
 import anthropic
 import openai
+import subprocess
+
+# Telethon for channel monitoring
+try:
+    from telethon import TelegramClient
+    from telethon.tl.types import Message
+    TELETHON_AVAILABLE = True
+except ImportError:
+    TELETHON_AVAILABLE = False
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════════════════
 
 BOT_TOKEN = os.getenv("THOUGHTS_BOT_TOKEN", "REDACTED_TOKEN_2")
+
+# Telethon config for channel parsing
+TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID")
+TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
+TELEGRAM_PHONE = os.getenv("TELEGRAM_PHONE")
 ADMIN_ID = int(os.getenv("ADMIN_TELEGRAM_ID", "0"))
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -77,6 +91,18 @@ ASSETS_DIR = BASE_DIR / "assets"
 ASSETS_DIR.mkdir(exist_ok=True)
 MONT_EYE = ASSETS_DIR / "MONT_eye.jpg"      # Глаз — отправка (ты наблюдаешь)
 MONT_JUNO = ASSETS_DIR / "MONT_juno.jpg"    # Юнона — получение (богиня принимает)
+
+# Channel monitoring config
+CHANNELS_DIR = DATA_DIR / "channels"
+CHANNELS_DIR.mkdir(exist_ok=True)
+SESSION_FILE = BASE_DIR / "montana_parser.session"
+CHANNEL_SYNC_INTERVAL = 60  # seconds
+GENESIS_DATE = datetime(2026, 1, 12, 0, 0, 0, tzinfo=timezone.utc)
+
+MONITORED_CHANNELS = {
+    "thoughts": "@mylifethoughts369",
+    "music": "@mylifeprogram369",
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2741,13 +2767,105 @@ async def presence_cycle(app):
             await asyncio.sleep(60)
 
 
+async def channel_sync_cycle(app):
+    """Background task: Monitor Telegram channels and sync to network."""
+    if not TELETHON_AVAILABLE:
+        print("Channel sync: Telethon not installed")
+        return
+
+    if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
+        print("Channel sync: API credentials not configured")
+        return
+
+    await asyncio.sleep(15)  # Wait for bot to start
+
+    try:
+        client = TelegramClient(str(SESSION_FILE), int(TELEGRAM_API_ID), TELEGRAM_API_HASH)
+        await client.start(phone=TELEGRAM_PHONE)
+
+        if not await client.is_user_authorized():
+            print("Channel sync: Not authorized")
+            return
+
+        me = await client.get_me()
+        print(f"Channel sync: Authorized as {me.first_name}")
+
+        cycle = 0
+        while True:
+            cycle += 1
+            total_new = 0
+
+            for key, username in MONITORED_CHANNELS.items():
+                try:
+                    entity = await client.get_entity(username)
+                    storage_file = CHANNELS_DIR / f"{key}.json"
+
+                    # Load existing
+                    existing = {}
+                    if storage_file.exists():
+                        data = json.loads(storage_file.read_text())
+                        existing = {int(k): v for k, v in data.get("messages", {}).items()}
+
+                    new_count = 0
+                    async for message in client.iter_messages(entity, limit=50):
+                        if not isinstance(message, Message):
+                            continue
+
+                        msg_date = message.date.astimezone(timezone.utc)
+                        if msg_date < GENESIS_DATE:
+                            continue
+
+                        if message.id in existing:
+                            continue
+
+                        existing[message.id] = {
+                            "id": message.id,
+                            "channel": username,
+                            "date_utc": msg_date.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                            "text": message.text or "",
+                            "views": message.views or 0,
+                        }
+                        new_count += 1
+                        total_new += 1
+
+                    if new_count > 0:
+                        data = {
+                            "channel": key,
+                            "last_updated": utc_str(),
+                            "message_count": len(existing),
+                            "messages": existing,
+                        }
+                        storage_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+                        print(f"  Channel {key}: +{new_count}")
+
+                except Exception as e:
+                    print(f"  Channel {key} error: {e}")
+
+            if total_new > 0:
+                # Sync to git
+                try:
+                    subprocess.run(["git", "add", str(CHANNELS_DIR)], cwd=str(BASE_DIR.parent.parent), capture_output=True)
+                    subprocess.run(["git", "commit", "-m", f"SYNC: Channels {utc_str()}"], cwd=str(BASE_DIR.parent.parent), capture_output=True)
+                    subprocess.run(["git", "push", "origin", "main"], cwd=str(BASE_DIR.parent.parent), capture_output=True)
+                    print(f"  Network synced: +{total_new} messages")
+                except:
+                    pass
+
+            await asyncio.sleep(CHANNEL_SYNC_INTERVAL)
+
+    except Exception as e:
+        print(f"Channel sync error: {e}")
+
+
 async def post_init(app):
-    """Set up menu commands and start presence cycle."""
+    """Set up menu commands and start background cycles."""
     await app.bot.set_my_commands(BOT_COMMANDS)
     load_chats()
     # Start presence cycle in background
     asyncio.create_task(presence_cycle(app))
-    print("Menu commands set, presence cycle started")
+    # Start channel sync cycle
+    asyncio.create_task(channel_sync_cycle(app))
+    print("Menu commands set, presence cycle started, channel sync started")
 
 
 def main():
