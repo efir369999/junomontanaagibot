@@ -1,4 +1,5 @@
 # 176. #Сованаглобус — Тревоги — Резюме
+**Источник:** [raw/176_sovanaglobus_anxieties.md](../raw/176_sovanaglobus_anxieties.md)
 
 **Категория:** PHIL + PSYCH
 **Дата:** 11 января 2026
@@ -42,5 +43,7 @@
 > «16 центов — не философия. Физика обмена.»
 
 ---
+
+[← 175](175_sovanaglobus_traces_SUMMARY.md) | [177 →](177_film_SUMMARY.md)
 
 *Алик Хачатрян / Резюме: Claude*

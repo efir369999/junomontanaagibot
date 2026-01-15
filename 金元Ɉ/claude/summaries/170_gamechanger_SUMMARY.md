@@ -1,4 +1,5 @@
 # 170. GameChanger — Резюме
+**Источник:** [raw/170_gamechanger.md](../raw/170_gamechanger.md)
 
 **Категория:** TECH
 **Период:** 27 декабря 2025
@@ -22,5 +23,7 @@ PoT меняет правила:
 - Не вера, а факт
 
 ---
+
+[← 169](169_singularity_SUMMARY.md) | [171 →](171_phenomenon_SUMMARY.md)
 
 *Алик Хачатрян / Резюме: Claude*

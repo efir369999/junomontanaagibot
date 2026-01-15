@@ -1,4 +1,5 @@
 # 175. #Сованаглобус — Следы — Резюме
+**Источник:** [raw/175_sovanaglobus_traces.md](../raw/175_sovanaglobus_traces.md)
 
 **Категория:** ECON + TECH
 **Дата:** 10-11 января 2026
@@ -30,5 +31,7 @@
 > «Демердж = штраф за нарушенное ожидание времени.»
 
 ---
+
+[← 174](174_flow_piter_SUMMARY.md) | [176 →](176_sovanaglobus_anxieties_SUMMARY.md)
 
 *Алик Хачатрян / Резюме: Claude*
