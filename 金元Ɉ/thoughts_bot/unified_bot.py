@@ -1755,6 +1755,10 @@ async def cmd_innovations(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("005 Temporal Unit Ɉ — Экономика", callback_data="innov_005")],
         [InlineKeyboardButton("006 PVA — Сеть", callback_data="innov_006")],
         [InlineKeyboardButton("007 Tokenomics of Freedom — Философия", callback_data="innov_007")],
+        [InlineKeyboardButton("008 τ Units — Время", callback_data="innov_008")],
+        [InlineKeyboardButton("009 Genesis — Начало", callback_data="innov_009")],
+        [InlineKeyboardButton("010 Asymptotic Truth — Эпистемология", callback_data="innov_010")],
+        [InlineKeyboardButton("011 Emission & Halving — Эмиссия", callback_data="innov_011")],
     ])
 
     await update.message.reply_text(
@@ -2433,6 +2437,26 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 "file": "007_TOKENOMICS_FREEDOM.md",
                 "emoji": "🗽"
             },
+            "008": {
+                "title": {"en": "τ (Tau) Units System", "ru": "Система единиц τ (тау)", "zh": "τ时间单位系统"},
+                "file": "008_TAU_UNITS.md",
+                "emoji": "⏱"
+            },
+            "009": {
+                "title": {"en": "Genesis", "ru": "Генезис", "zh": "创世"},
+                "file": "009_GENESIS.md",
+                "emoji": "🌅"
+            },
+            "010": {
+                "title": {"en": "Asymptotic Truth", "ru": "Асимптотическая истина", "zh": "渐近真理"},
+                "file": "010_ASYMPTOTIC_TRUTH.md",
+                "emoji": "∞"
+            },
+            "011": {
+                "title": {"en": "Emission & Halving", "ru": "Эмиссия и халвинг", "zh": "发行与减半"},
+                "file": "011_EMISSION_HALVING.md",
+                "emoji": "📉"
+            },
         }
 
         if innov_num in innovations:
@@ -2471,6 +2495,10 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("005 Temporal Unit Ɉ — Экономика", callback_data="innov_005")],
             [InlineKeyboardButton("006 PVA — Сеть", callback_data="innov_006")],
             [InlineKeyboardButton("007 Tokenomics of Freedom — Философия", callback_data="innov_007")],
+            [InlineKeyboardButton("008 τ Units — Время", callback_data="innov_008")],
+            [InlineKeyboardButton("009 Genesis — Начало", callback_data="innov_009")],
+            [InlineKeyboardButton("010 Asymptotic Truth — Эпистемология", callback_data="innov_010")],
+            [InlineKeyboardButton("011 Emission & Halving — Эмиссия", callback_data="innov_011")],
         ])
 
         await q.message.edit_text(
