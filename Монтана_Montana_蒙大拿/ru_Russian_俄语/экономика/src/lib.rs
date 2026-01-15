@@ -139,37 +139,32 @@ impl Emission {
     }
 }
 
-/// Распределение эмиссии
+/// Распределение эмиссии (80/20)
 #[derive(Clone, Copy, Debug)]
 pub struct Distribution {
-    /// Доля присутствующих узлов (70%)
-    pub presence_share: f64,
+    /// Доля Full Nodes (80%)
+    pub full_node_share: f64,
 
-    /// Доля победителя лотереи (20%)
-    pub winner_share: f64,
-
-    /// Доля пула развития (10%)
-    pub development_share: f64,
+    /// Доля Verified Users (20%)
+    pub verified_user_share: f64,
 }
 
 impl Default for Distribution {
     fn default() -> Self {
         Self {
-            presence_share: 0.70,
-            winner_share: 0.20,
-            development_share: 0.10,
+            full_node_share: 0.80,
+            verified_user_share: 0.20,
         }
     }
 }
 
 impl Distribution {
-    /// Рассчитать распределение
-    pub fn calculate(&self, total_emission: u64) -> (u64, u64, u64) {
-        let presence = (total_emission as f64 * self.presence_share) as u64;
-        let winner = (total_emission as f64 * self.winner_share) as u64;
-        let development = total_emission - presence - winner; // Остаток
+    /// Рассчитать распределение (80/20)
+    pub fn calculate(&self, total_emission: u64) -> (u64, u64) {
+        let full_nodes = (total_emission as f64 * self.full_node_share) as u64;
+        let verified_users = total_emission - full_nodes; // Остаток
 
-        (presence, winner, development)
+        (full_nodes, verified_users)
     }
 }
 
@@ -502,11 +497,10 @@ mod tests {
     #[test]
     fn test_distribution() {
         let dist = Distribution::default();
-        let (presence, winner, dev) = dist.calculate(1000);
+        let (full_nodes, verified_users) = dist.calculate(1000);
 
-        assert_eq!(presence, 700);
-        assert_eq!(winner, 200);
-        assert_eq!(dev, 100);
+        assert_eq!(full_nodes, 800);       // 80%
+        assert_eq!(verified_users, 200);   // 20%
     }
 
     #[test]
