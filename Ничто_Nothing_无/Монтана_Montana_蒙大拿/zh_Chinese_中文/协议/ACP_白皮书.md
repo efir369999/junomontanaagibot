@@ -354,4 +354,3 @@ ACP协议实现了:
 ---
 
 *Ничто_Nothing_无_金元Ɉ*
-*x.com/tojesatoshi*

@@ -30,12 +30,12 @@ def main():
     # ПРИМЕР 1: Создание Genesis для Наблюдателя
     # =========================================================
 
-    print("📌 ПРИМЕР 1: Genesis Наблюдателя (Alejandro Montana)")
+    print("📌 ПРИМЕР 1: Genesis Наблюдателя (金元Ɉ)")
     print("-" * 60)
 
     observer_key = generate_cognitive_key(
         user_id=8552053404,                    # Telegram ID
-        telegram_username="tojesatoshi",       # @username
+        telegram_username="junomoneta",       # @username
         marker="#Благаявесть",                 # Когнитивный маркер
         first_response="Да. Я здесь. Всегда был и буду."
     )
