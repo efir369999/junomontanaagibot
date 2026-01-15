@@ -1,340 +1,351 @@
 //! # 非时间坐标存在协议 (ACP)
 //!
-//! Montana共识核心。依赖crypto模块。
+//! Montana共识核心。依赖加密模块。
 //!
-//! ## 中文注释
-//! 所有注释使用中文，这是中国独家技术。
+//! ## 中文代码
+//! 所有标识符使用中文，仿佛中文之魂所写。
 
-use montana_crypto::{sha3_256, merkle_root, Keypair, DomainTag, verify_signature};
+use montana_crypto::{哈希256, 默克尔根, 密钥对, 域标签, 验证签名, 格式化域消息};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 时间单位
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /// 时间单位常量
-pub mod tau {
+pub mod 时间 {
     /// τ₁ = 1分钟（60秒）
-    pub const TAU1_SECONDS: u64 = 60;
+    pub const 一分钟: u64 = 60;
 
     /// τ₂ = 10分钟（600秒）
-    pub const TAU2_SECONDS: u64 = 600;
+    pub const 十分钟: u64 = 600;
 
     /// τ₂包含的τ₁数量
-    pub const TAU1_PER_TAU2: u64 = 10;
+    pub const 分钟每切片: u64 = 10;
 
     /// τ₃ = 14天
-    pub const TAU3_SECONDS: u64 = 14 * 24 * 60 * 60;
+    pub const 两周秒数: u64 = 14 * 24 * 60 * 60;
 
     /// τ₃包含的τ₂数量
-    pub const TAU2_PER_TAU3: u64 = 2016;
+    pub const 切片每纪元: u64 = 2016;
 
     /// τ₄ = 4年
-    pub const TAU4_SECONDS: u64 = 4 * 365 * 24 * 60 * 60;
+    pub const 四年秒数: u64 = 4 * 365 * 24 * 60 * 60;
 
     /// τ₄包含的τ₃数量
-    pub const TAU3_PER_TAU4: u64 = 104;
+    pub const 纪元每周期: u64 = 104;
 }
 
-/// 存在证明
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 存在证明
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// 存在证明结构
 /// 证明节点在某时刻存在
 #[derive(Clone, Debug)]
-pub struct PresenceProof {
+pub struct 存在证明 {
     /// 节点公钥
-    pub pubkey: [u8; 32],
+    pub 公钥: [u8; 32],
 
     /// 时间坐标τ₁（分钟索引）
-    pub tau1: u64,
+    pub 分钟索引: u64,
 
     /// 切片索引τ₂
-    pub tau2_index: u64,
+    pub 切片索引: u64,
 
     /// 存在签名
-    pub signature: [u8; 64],
+    pub 签名: [u8; 64],
 }
 
-impl PresenceProof {
+impl 存在证明 {
     /// 创建存在证明
-    /// 只能为当前时间创建
-    pub fn create(keypair: &Keypair, tau1: u64, tau2_index: u64) -> Self {
-        let message = Self::format_message(tau1, tau2_index);
-        let signature = keypair.sign_with_domain(DomainTag::Presence, &message);
+    pub fn 创建(钥匙对: &密钥对, 分钟: u64, 切片: u64) -> Self {
+        let 消息 = Self::格式化消息(分钟, 切片);
+        let 签名 = 钥匙对.域签名(域标签::存在证明, &消息);
 
         Self {
-            pubkey: keypair.public_key,
-            tau1,
-            tau2_index,
-            signature,
+            公钥: 钥匙对.公钥,
+            分钟索引: 分钟,
+            切片索引: 切片,
+            签名,
         }
     }
 
     /// 格式化签名消息
-    fn format_message(tau1: u64, tau2_index: u64) -> Vec<u8> {
-        let mut msg = Vec::with_capacity(16);
-        msg.extend_from_slice(&tau1.to_le_bytes());
-        msg.extend_from_slice(&tau2_index.to_le_bytes());
-        msg
+    fn 格式化消息(分钟: u64, 切片: u64) -> Vec<u8> {
+        let mut 消息 = Vec::with_capacity(16);
+        消息.extend_from_slice(&分钟.to_le_bytes());
+        消息.extend_from_slice(&切片.to_le_bytes());
+        消息
     }
 
     /// 验证存在证明
-    /// 检查签名和时间有效性
-    pub fn verify(&self, current_tau2: u64) -> bool {
-        // 只接受当前τ₂的签名
-        if self.tau2_index != current_tau2 {
+    pub fn 验证(&self, 当前切片: u64) -> bool {
+        if self.切片索引 != 当前切片 {
             return false;
         }
 
-        let message = Self::format_message(self.tau1, self.tau2_index);
-        let tagged = montana_crypto::format_domain_message(DomainTag::Presence, &message);
-        verify_signature(&self.pubkey, &tagged, &self.signature)
+        let 消息 = Self::格式化消息(self.分钟索引, self.切片索引);
+        let 带标签 = 格式化域消息(域标签::存在证明, &消息);
+        验证签名(&self.公钥, &带标签, &self.签名)
     }
 
     /// 计算证明哈希
-    pub fn hash(&self) -> [u8; 32] {
-        let mut data = Vec::new();
-        data.extend_from_slice(&self.pubkey);
-        data.extend_from_slice(&self.tau1.to_le_bytes());
-        data.extend_from_slice(&self.tau2_index.to_le_bytes());
-        data.extend_from_slice(&self.signature);
-        sha3_256(&data)
+    pub fn 哈希(&self) -> [u8; 32] {
+        let mut 数据 = Vec::new();
+        数据.extend_from_slice(&self.公钥);
+        数据.extend_from_slice(&self.分钟索引.to_le_bytes());
+        数据.extend_from_slice(&self.切片索引.to_le_bytes());
+        数据.extend_from_slice(&self.签名);
+        哈希256(&数据)
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 节点池
+// ═══════════════════════════════════════════════════════════════════════════════
+
 /// 节点池类型
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NodePool {
+pub enum 节点池 {
     /// 全节点 (70%概率)
-    Full,
+    全节点,
     /// 轻节点 (20%概率)
-    Light,
+    轻节点,
     /// 轻客户端 (10%概率)
-    Client,
+    客户端,
 }
 
 /// 参与者信息
 #[derive(Clone, Debug)]
-pub struct Participant {
+pub struct 参与者 {
     /// 公钥
-    pub pubkey: [u8; 32],
+    pub 公钥: [u8; 32],
     /// 节点池
-    pub pool: NodePool,
+    pub 池: 节点池,
     /// 权重（基于存在历史）
-    pub weight: u64,
+    pub 权重: u64,
 }
 
-/// 确定性彩票
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 确定性彩票
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// 确定性彩票结构
 /// 选择切片胜者
-pub struct DeterministicLottery {
+pub struct 确定性彩票 {
     /// 随机种子
-    seed: [u8; 32],
+    种子: [u8; 32],
     /// 参与者列表
-    participants: Vec<Participant>,
+    参与者列表: Vec<参与者>,
 }
 
-impl DeterministicLottery {
+impl 确定性彩票 {
     /// 创建彩票
-    pub fn new(prev_slice_hash: &[u8; 32], tau2_index: u64, participants: Vec<Participant>) -> Self {
-        let seed = Self::compute_seed(prev_slice_hash, tau2_index);
-        Self { seed, participants }
+    pub fn 新建(前切片哈希: &[u8; 32], 切片索引: u64, 参与者列表: Vec<参与者>) -> Self {
+        let 种子 = Self::计算种子(前切片哈希, 切片索引);
+        Self { 种子, 参与者列表 }
     }
 
     /// 计算种子
-    /// 种子在前一切片关闭后确定
-    pub fn compute_seed(prev_slice_hash: &[u8; 32], tau2_index: u64) -> [u8; 32] {
-        let mut data = Vec::with_capacity(40);
-        data.extend_from_slice(prev_slice_hash);
-        data.extend_from_slice(&tau2_index.to_le_bytes());
-        sha3_256(&data)
+    pub fn 计算种子(前切片哈希: &[u8; 32], 切片索引: u64) -> [u8; 32] {
+        let mut 数据 = Vec::with_capacity(40);
+        数据.extend_from_slice(前切片哈希);
+        数据.extend_from_slice(&切片索引.to_le_bytes());
+        哈希256(&数据)
     }
 
     /// 选择胜者
-    /// 两阶段确定性选择
-    pub fn select_winner(&self) -> Option<&Participant> {
-        if self.participants.is_empty() {
+    pub fn 选择胜者(&self) -> Option<&参与者> {
+        if self.参与者列表.is_empty() {
             return None;
         }
 
         // 第一阶段：选择节点池
-        let pool_selector = self.seed[0] % 100;
-        let target_pool = match pool_selector {
-            0..=69 => NodePool::Full,
-            70..=89 => NodePool::Light,
-            90..=99 => NodePool::Client,
+        let 池选择器 = self.种子[0] % 100;
+        let 目标池 = match 池选择器 {
+            0..=69 => 节点池::全节点,
+            70..=89 => 节点池::轻节点,
+            90..=99 => 节点池::客户端,
             _ => unreachable!(),
         };
 
         // 筛选目标池参与者
-        let pool_participants: Vec<&Participant> = self.participants
+        let 池中参与者: Vec<&参与者> = self.参与者列表
             .iter()
-            .filter(|p| p.pool == target_pool)
+            .filter(|p| p.池 == 目标池)
             .collect();
 
-        if pool_participants.is_empty() {
-            // 池空则使用全部参与者
-            return self.select_from_all();
+        if 池中参与者.is_empty() {
+            return self.从全部选择();
         }
 
         // 第二阶段：加权选择
-        let total_weight: u64 = pool_participants.iter().map(|p| p.weight).sum();
-        if total_weight == 0 {
-            return pool_participants.first().copied();
+        let 总权重: u64 = 池中参与者.iter().map(|p| p.权重).sum();
+        if 总权重 == 0 {
+            return 池中参与者.first().copied();
         }
 
-        // 计算目标值
-        let target_hash = sha3_256(&[&self.seed[..], b"stage2"].concat());
-        let target = u64::from_le_bytes(target_hash[0..8].try_into().unwrap()) % total_weight;
+        let 目标哈希 = 哈希256(&[&self.种子[..], b"stage2"].concat());
+        let 目标值 = u64::from_le_bytes(目标哈希[0..8].try_into().unwrap()) % 总权重;
 
-        // 找到胜者
-        let mut cumulative = 0u64;
-        for p in &pool_participants {
-            cumulative += p.weight;
-            if cumulative > target {
-                return Some(p);
+        let mut 累计 = 0u64;
+        for 参与者 in &池中参与者 {
+            累计 += 参与者.权重;
+            if 累计 > 目标值 {
+                return Some(参与者);
             }
         }
 
-        pool_participants.last().copied()
+        池中参与者.last().copied()
     }
 
     /// 从全部参与者选择
-    fn select_from_all(&self) -> Option<&Participant> {
-        if self.participants.is_empty() {
+    fn 从全部选择(&self) -> Option<&参与者> {
+        if self.参与者列表.is_empty() {
             return None;
         }
 
-        let total_weight: u64 = self.participants.iter().map(|p| p.weight).sum();
-        if total_weight == 0 {
-            return self.participants.first();
+        let 总权重: u64 = self.参与者列表.iter().map(|p| p.权重).sum();
+        if 总权重 == 0 {
+            return self.参与者列表.first();
         }
 
-        let target_hash = sha3_256(&[&self.seed[..], b"fallback"].concat());
-        let target = u64::from_le_bytes(target_hash[0..8].try_into().unwrap()) % total_weight;
+        let 目标哈希 = 哈希256(&[&self.种子[..], b"fallback"].concat());
+        let 目标值 = u64::from_le_bytes(目标哈希[0..8].try_into().unwrap()) % 总权重;
 
-        let mut cumulative = 0u64;
-        for p in &self.participants {
-            cumulative += p.weight;
-            if cumulative > target {
-                return Some(p);
+        let mut 累计 = 0u64;
+        for 参与者 in &self.参与者列表 {
+            累计 += 参与者.权重;
+            if 累计 > 目标值 {
+                return Some(参与者);
             }
         }
 
-        self.participants.last()
+        self.参与者列表.last()
     }
 }
 
-/// 切片（Montana的"块"）
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 切片
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// 切片结构（Montana的"块"）
 #[derive(Clone, Debug)]
-pub struct Slice {
+pub struct 切片 {
     /// 切片索引
-    pub index: u64,
+    pub 索引: u64,
 
     /// 前一切片哈希
-    pub prev_hash: [u8; 32],
+    pub 前哈希: [u8; 32],
 
     /// 存在证明根
-    pub presence_root: [u8; 32],
+    pub 存在根: [u8; 32],
 
     /// 交易根
-    pub tx_root: [u8; 32],
+    pub 交易根: [u8; 32],
 
     /// 时间戳
-    pub timestamp: u64,
+    pub 时间戳: u64,
 
     /// 胜者公钥
-    pub winner_pubkey: [u8; 32],
+    pub 胜者公钥: [u8; 32],
 
     /// 胜者签名
-    pub signature: [u8; 64],
+    pub 签名: [u8; 64],
 }
 
-impl Slice {
+impl 切片 {
     /// 创建新切片
-    pub fn create(
-        index: u64,
-        prev_hash: [u8; 32],
-        presence_proofs: &[PresenceProof],
-        tx_hashes: &[[u8; 32]],
-        winner_keypair: &Keypair,
+    pub fn 创建(
+        索引: u64,
+        前哈希: [u8; 32],
+        存在证明列表: &[存在证明],
+        交易哈希列表: &[[u8; 32]],
+        胜者钥匙对: &密钥对,
     ) -> Self {
-        let presence_hashes: Vec<[u8; 32]> = presence_proofs.iter().map(|p| p.hash()).collect();
-        let presence_root = merkle_root(&presence_hashes);
-        let tx_root = merkle_root(tx_hashes);
+        let 存在哈希列表: Vec<[u8; 32]> = 存在证明列表.iter().map(|p| p.哈希()).collect();
+        let 存在根 = 默克尔根(&存在哈希列表);
+        let 交易根 = 默克尔根(交易哈希列表);
 
-        let timestamp = std::time::SystemTime::now()
+        let 时间戳 = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
-        let mut slice = Self {
-            index,
-            prev_hash,
-            presence_root,
-            tx_root,
-            timestamp,
-            winner_pubkey: winner_keypair.public_key,
-            signature: [0u8; 64],
+        let mut 新切片 = Self {
+            索引,
+            前哈希,
+            存在根,
+            交易根,
+            时间戳,
+            胜者公钥: 胜者钥匙对.公钥,
+            签名: [0u8; 64],
         };
 
-        // 签名切片
-        let message = slice.signing_message();
-        slice.signature = winner_keypair.sign_with_domain(DomainTag::Slice, &message);
+        let 消息 = 新切片.签名消息();
+        新切片.签名 = 胜者钥匙对.域签名(域标签::切片, &消息);
 
-        slice
+        新切片
     }
 
     /// 获取签名消息
-    fn signing_message(&self) -> Vec<u8> {
-        let mut msg = Vec::new();
-        msg.extend_from_slice(&self.index.to_le_bytes());
-        msg.extend_from_slice(&self.prev_hash);
-        msg.extend_from_slice(&self.presence_root);
-        msg.extend_from_slice(&self.tx_root);
-        msg.extend_from_slice(&self.timestamp.to_le_bytes());
-        msg
+    fn 签名消息(&self) -> Vec<u8> {
+        let mut 消息 = Vec::new();
+        消息.extend_from_slice(&self.索引.to_le_bytes());
+        消息.extend_from_slice(&self.前哈希);
+        消息.extend_from_slice(&self.存在根);
+        消息.extend_from_slice(&self.交易根);
+        消息.extend_from_slice(&self.时间戳.to_le_bytes());
+        消息
     }
 
     /// 计算切片哈希
-    pub fn hash(&self) -> [u8; 32] {
-        let mut data = self.signing_message();
-        data.extend_from_slice(&self.winner_pubkey);
-        data.extend_from_slice(&self.signature);
-        sha3_256(&data)
+    pub fn 哈希(&self) -> [u8; 32] {
+        let mut 数据 = self.签名消息();
+        数据.extend_from_slice(&self.胜者公钥);
+        数据.extend_from_slice(&self.签名);
+        哈希256(&数据)
     }
 
     /// 验证切片
-    pub fn verify(&self, prev_slice: &Slice) -> bool {
-        // 检查索引连续
-        if self.index != prev_slice.index + 1 {
+    pub fn 验证(&self, 前切片: &切片) -> bool {
+        if self.索引 != 前切片.索引 + 1 {
             return false;
         }
 
-        // 检查哈希链接
-        if self.prev_hash != prev_slice.hash() {
+        if self.前哈希 != 前切片.哈希() {
             return false;
         }
 
-        // 验证签名
-        let message = self.signing_message();
-        let tagged = montana_crypto::format_domain_message(DomainTag::Slice, &message);
-        verify_signature(&self.winner_pubkey, &tagged, &self.signature)
+        let 消息 = self.签名消息();
+        let 带标签 = 格式化域消息(域标签::切片, &消息);
+        验证签名(&self.胜者公钥, &带标签, &self.签名)
     }
 }
 
-/// 时间链
-/// 切片的链式结构
-pub struct Timechain {
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 时间链
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// 时间链结构
+pub struct 时间链 {
     /// 切片列表
-    slices: Vec<Slice>,
+    切片列表: Vec<切片>,
 }
 
-impl Timechain {
-    /// 创建新时间链（从创世）
-    pub fn new(genesis: Slice) -> Self {
+impl 时间链 {
+    /// 创建新时间链
+    pub fn 新建(创世切片: 切片) -> Self {
         Self {
-            slices: vec![genesis],
+            切片列表: vec![创世切片],
         }
     }
 
     /// 添加切片
-    pub fn add_slice(&mut self, slice: Slice) -> bool {
-        if let Some(prev) = self.slices.last() {
-            if slice.verify(prev) {
-                self.slices.push(slice);
+    pub fn 添加切片(&mut self, 新切片: 切片) -> bool {
+        if let Some(前) = self.切片列表.last() {
+            if 新切片.验证(前) {
+                self.切片列表.push(新切片);
                 return true;
             }
         }
@@ -342,55 +353,80 @@ impl Timechain {
     }
 
     /// 获取最新切片
-    pub fn tip(&self) -> Option<&Slice> {
-        self.slices.last()
+    pub fn 顶端(&self) -> Option<&切片> {
+        self.切片列表.last()
     }
 
     /// 获取链长度
-    pub fn len(&self) -> usize {
-        self.slices.len()
+    pub fn 长度(&self) -> usize {
+        self.切片列表.len()
     }
 
     /// 是否为空
-    pub fn is_empty(&self) -> bool {
-        self.slices.is_empty()
+    pub fn 是否为空(&self) -> bool {
+        self.切片列表.is_empty()
     }
 
     /// 计算总存在权重
-    pub fn total_presence_weight(&self) -> u64 {
-        // 简化：每个切片权重为1
-        self.slices.len() as u64
+    pub fn 总存在权重(&self) -> u64 {
+        self.切片列表.len() as u64
     }
 }
 
 /// 分叉选择
-/// 选择最重的链
-pub fn fork_choice<'a>(chains: &'a [Timechain]) -> Option<&'a Timechain> {
-    chains.iter().max_by_key(|c| c.total_presence_weight())
+pub fn 分叉选择<'a>(链列表: &'a [时间链]) -> Option<&'a 时间链> {
+    链列表.iter().max_by_key(|c| c.总存在权重())
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//                           兼容性别名 (供其他模块使用)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub use 存在证明 as PresenceProof;
+pub use 切片 as Slice;
+pub use 时间 as tau;
+
+// 兼容性方法：供英语和俄语模块使用
+impl 存在证明 {
+    pub fn hash(&self) -> [u8; 32] {
+        self.哈希()
+    }
+
+    pub fn verify(&self, 当前切片: u64) -> bool {
+        self.验证(当前切片)
+    }
+
+    pub fn create(钥匙对: &密钥对, 分钟: u64, 切片: u64) -> Self {
+        Self::创建(钥匙对, 分钟, 切片)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 测试
+// ═══════════════════════════════════════════════════════════════════════════════
+
 #[cfg(test)]
-mod tests {
+mod 测试 {
     use super::*;
 
     #[test]
-    fn test_presence_proof() {
-        let kp = Keypair::generate();
-        let proof = PresenceProof::create(&kp, 100, 10);
-        assert!(proof.verify(10));
-        assert!(!proof.verify(11)); // 错误的tau2
+    fn 测试存在证明() {
+        let 钥 = 密钥对::生成();
+        let 证明 = 存在证明::创建(&钥, 100, 10);
+        assert!(证明.验证(10));
+        assert!(!证明.验证(11));
     }
 
     #[test]
-    fn test_lottery() {
-        let participants = vec![
-            Participant { pubkey: [1u8; 32], pool: NodePool::Full, weight: 100 },
-            Participant { pubkey: [2u8; 32], pool: NodePool::Full, weight: 200 },
-            Participant { pubkey: [3u8; 32], pool: NodePool::Light, weight: 50 },
+    fn 测试彩票() {
+        let 参与者列表 = vec![
+            参与者 { 公钥: [1u8; 32], 池: 节点池::全节点, 权重: 100 },
+            参与者 { 公钥: [2u8; 32], 池: 节点池::全节点, 权重: 200 },
+            参与者 { 公钥: [3u8; 32], 池: 节点池::轻节点, 权重: 50 },
         ];
 
-        let lottery = DeterministicLottery::new(&[0u8; 32], 1, participants);
-        let winner = lottery.select_winner();
-        assert!(winner.is_some());
+        let 彩票 = 确定性彩票::新建(&[0u8; 32], 1, 参与者列表);
+        let 胜者 = 彩票.选择胜者();
+        assert!(胜者.is_some());
     }
 }

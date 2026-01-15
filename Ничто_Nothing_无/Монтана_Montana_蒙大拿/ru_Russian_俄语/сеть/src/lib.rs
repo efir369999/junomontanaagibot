@@ -2,78 +2,85 @@
 //!
 //! Распространение подписей присутствия между узлами.
 //!
-//! ## Русские комментарии
-//! Все комментарии на русском — это эксклюзивная русская технология.
+//! ## Русский код
+//! Все идентификаторы на русском, как будто писал дух русского языка.
 
-use montana_crypto::{sha3_256, secure_random_bytes};
-use montana_acp::PresenceProof;
+use montana_crypto::{sha3_256 as хеш256, secure_random_bytes as случайные_байты};
+use montana_acp::PresenceProof as ДоказательствоПрисутствия;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::IpAddr;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                              ЛИМИТЫ СОЕДИНЕНИЙ
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /// Лимиты соединений
 /// Защита от перегрузки и Eclipse-атак
 #[derive(Clone, Copy, Debug)]
-pub struct ConnectionLimits {
+pub struct ЛимитыСоединений {
     /// Максимум входящих соединений
-    pub max_inbound: usize,
+    pub максимум_входящих: usize,
 
     /// Максимум исходящих соединений
-    pub max_outbound: usize,
+    pub максимум_исходящих: usize,
 
     /// Максимум соединений на подсеть /16
-    pub max_per_netgroup: usize,
+    pub максимум_на_подсеть: usize,
 
     /// Минимум различных подсетей
-    pub min_netgroups: usize,
+    pub минимум_подсетей: usize,
 }
 
-impl Default for ConnectionLimits {
+impl Default for ЛимитыСоединений {
     fn default() -> Self {
         Self {
-            max_inbound: 117,      // Защита от перегрузки
-            max_outbound: 11,      // Связность без избыточности
-            max_per_netgroup: 2,   // Разнообразие подсетей
-            min_netgroups: 4,      // Географическое распределение
+            максимум_входящих: 117,
+            максимум_исходящих: 11,
+            максимум_на_подсеть: 2,
+            минимум_подсетей: 4,
         }
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//                              СЕТЕВОЙ АДРЕС
+// ═══════════════════════════════════════════════════════════════════════════════
+
 /// Сетевой адрес узла
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct NetAddr {
+pub struct СетевойАдрес {
     /// IP адрес
-    pub ip: IpAddr,
+    pub адрес: IpAddr,
 
     /// Порт
-    pub port: u16,
+    pub порт: u16,
 
     /// Временная метка последнего контакта
-    pub timestamp: u64,
+    pub метка_времени: u64,
 
     /// Сервисы узла
-    pub services: u64,
+    pub сервисы: u64,
 }
 
-impl NetAddr {
+impl СетевойАдрес {
     /// Создать новый адрес
-    pub fn new(ip: IpAddr, port: u16) -> Self {
-        let timestamp = std::time::SystemTime::now()
+    pub fn новый(адрес: IpAddr, порт: u16) -> Self {
+        let метка_времени = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
 
         Self {
-            ip,
-            port,
-            timestamp,
-            services: 0,
+            адрес,
+            порт,
+            метка_времени,
+            сервисы: 0,
         }
     }
 
     /// Проверить роутабельность адреса
-    /// Отфильтровать локальные и зарезервированные адреса
-    pub fn is_routable(&self) -> bool {
-        match self.ip {
+    pub fn маршрутизируемый(&self) -> bool {
+        match self.адрес {
             IpAddr::V4(ip) => {
                 !ip.is_private()
                     && !ip.is_loopback()
@@ -89,435 +96,462 @@ impl NetAddr {
     }
 
     /// Получить ключ группы (для бакетирования)
-    /// IPv4: /16 подсеть, IPv6: /32 подсеть
-    pub fn group_key(&self) -> [u8; 4] {
-        match self.ip {
+    pub fn ключ_группы(&self) -> [u8; 4] {
+        match self.адрес {
             IpAddr::V4(ip) => {
-                let octets = ip.octets();
-                [octets[0], octets[1], 0, 0] // /16
+                let октеты = ip.octets();
+                [октеты[0], октеты[1], 0, 0]
             }
             IpAddr::V6(ip) => {
-                let segments = ip.segments();
-                let bytes = segments[0].to_be_bytes();
-                let bytes2 = segments[1].to_be_bytes();
-                [bytes[0], bytes[1], bytes2[0], bytes2[1]] // /32
+                let сегменты = ip.segments();
+                let байты1 = сегменты[0].to_be_bytes();
+                let байты2 = сегменты[1].to_be_bytes();
+                [байты1[0], байты1[1], байты2[0], байты2[1]]
             }
         }
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//                              МЕНЕДЖЕР АДРЕСОВ
+// ═══════════════════════════════════════════════════════════════════════════════
+
 /// Менеджер адресов
 /// Защита от Eclipse через криптографическое бакетирование
-pub struct AddrManager {
+pub struct МенеджерАдресов {
     /// Новые адреса (непроверенные)
-    new_addrs: HashMap<usize, Vec<NetAddr>>,
+    новые: HashMap<usize, Vec<СетевойАдрес>>,
 
-    /// Проверенные адреса (успешно подключались)
-    tried_addrs: HashMap<usize, Vec<NetAddr>>,
+    /// Проверенные адреса
+    проверенные: HashMap<usize, Vec<СетевойАдрес>>,
 
     /// Секретный ключ для бакетирования
-    /// Уникален для каждого узла — атакующий не знает схему
-    bucket_key: [u8; 32],
+    секретный_ключ: [u8; 32],
 
-    /// Количество new бакетов
-    new_buckets: usize,
+    /// Количество новых бакетов
+    количество_новых_бакетов: usize,
 
-    /// Количество tried бакетов
-    tried_buckets: usize,
+    /// Количество проверенных бакетов
+    количество_проверенных_бакетов: usize,
 
-    /// Максимум адресов в бакете
-    bucket_size: usize,
+    /// Размер бакета
+    размер_бакета: usize,
 }
 
-impl AddrManager {
-    /// Создать новый менеджер адресов
-    pub fn new() -> Self {
+impl МенеджерАдресов {
+    /// Создать новый менеджер
+    pub fn новый() -> Self {
         Self {
-            new_addrs: HashMap::new(),
-            tried_addrs: HashMap::new(),
-            bucket_key: secure_random_bytes(),
-            new_buckets: 1024,
-            tried_buckets: 256,
-            bucket_size: 64,
+            новые: HashMap::new(),
+            проверенные: HashMap::new(),
+            секретный_ключ: случайные_байты(),
+            количество_новых_бакетов: 1024,
+            количество_проверенных_бакетов: 256,
+            размер_бакета: 64,
         }
     }
 
     /// Вычислить бакет для адреса
-    /// Криптографическое размещение — атакующий не может предсказать
-    fn calculate_bucket(&self, addr: &NetAddr, source: &NetAddr, is_new: bool) -> usize {
-        let mut data = Vec::new();
-        data.extend_from_slice(&self.bucket_key);
-        data.extend_from_slice(&addr.group_key());
-        data.extend_from_slice(&source.group_key());
+    fn вычислить_бакет(&self, адрес: &СетевойАдрес, источник: &СетевойАдрес, новый: bool) -> usize {
+        let mut данные = Vec::new();
+        данные.extend_from_slice(&self.секретный_ключ);
+        данные.extend_from_slice(&адрес.ключ_группы());
+        данные.extend_from_slice(&источник.ключ_группы());
 
-        let hash = sha3_256(&data);
-        let bucket_count = if is_new { self.new_buckets } else { self.tried_buckets };
+        let хеш = хеш256(&данные);
+        let количество = if новый { self.количество_новых_бакетов } else { self.количество_проверенных_бакетов };
 
-        (u64::from_le_bytes(hash[0..8].try_into().unwrap()) as usize) % bucket_count
+        (u64::from_le_bytes(хеш[0..8].try_into().unwrap()) as usize) % количество
     }
 
-    /// Добавить адрес в new таблицу
-    pub fn add_new(&mut self, addr: NetAddr, source: &NetAddr) -> bool {
-        // Фильтрация нероутабельных
-        if !addr.is_routable() {
+    /// Добавить адрес в таблицу новых
+    pub fn добавить_новый(&mut self, адрес: СетевойАдрес, источник: &СетевойАдрес) -> bool {
+        if !адрес.маршрутизируемый() {
             return false;
         }
 
-        let bucket = self.calculate_bucket(&addr, source, true);
+        let бакет = self.вычислить_бакет(&адрес, источник, true);
+        let адреса_бакета = self.новые.entry(бакет).or_insert_with(Vec::new);
 
-        let bucket_addrs = self.new_addrs.entry(bucket).or_insert_with(Vec::new);
-
-        // Проверить лимит бакета
-        if bucket_addrs.len() >= self.bucket_size {
-            // Удалить самый старый
-            if let Some(oldest_idx) = bucket_addrs
+        if адреса_бакета.len() >= self.размер_бакета {
+            if let Some(индекс_старого) = адреса_бакета
                 .iter()
                 .enumerate()
-                .min_by_key(|(_, a)| a.timestamp)
-                .map(|(i, _)| i)
+                .min_by_key(|(_, а)| а.метка_времени)
+                .map(|(и, _)| и)
             {
-                bucket_addrs.remove(oldest_idx);
+                адреса_бакета.remove(индекс_старого);
             }
         }
 
-        // Проверить дубликаты
-        if !bucket_addrs.contains(&addr) {
-            bucket_addrs.push(addr);
+        if !адреса_бакета.contains(&адрес) {
+            адреса_бакета.push(адрес);
             true
         } else {
             false
         }
     }
 
-    /// Перевести адрес в tried (после успешного подключения)
-    pub fn mark_good(&mut self, addr: &NetAddr) {
-        // Найти и удалить из new
-        for bucket_addrs in self.new_addrs.values_mut() {
-            if let Some(pos) = bucket_addrs.iter().position(|a| a == addr) {
-                bucket_addrs.remove(pos);
+    /// Отметить адрес как хороший
+    pub fn отметить_хорошим(&mut self, адрес: &СетевойАдрес) {
+        for адреса_бакета in self.новые.values_mut() {
+            if let Some(позиция) = адреса_бакета.iter().position(|а| а == адрес) {
+                адреса_бакета.remove(позиция);
                 break;
             }
         }
 
-        // Добавить в tried
-        let dummy_source = NetAddr::new(addr.ip, 0);
-        let bucket = self.calculate_bucket(addr, &dummy_source, false);
+        let пустой_источник = СетевойАдрес::новый(адрес.адрес, 0);
+        let бакет = self.вычислить_бакет(адрес, &пустой_источник, false);
 
-        let bucket_addrs = self.tried_addrs.entry(bucket).or_insert_with(Vec::new);
+        let адреса_бакета = self.проверенные.entry(бакет).or_insert_with(Vec::new);
 
-        if bucket_addrs.len() < self.bucket_size && !bucket_addrs.contains(addr) {
-            bucket_addrs.push(addr.clone());
+        if адреса_бакета.len() < self.размер_бакета && !адреса_бакета.contains(адрес) {
+            адреса_бакета.push(адрес.clone());
         }
     }
 
     /// Выбрать адрес для подключения
-    /// Баланс между tried и new (50/50)
-    pub fn select_for_connection(&self) -> Option<NetAddr> {
-        let use_tried = rand::random::<bool>();
+    pub fn выбрать_для_подключения(&self) -> Option<СетевойАдрес> {
+        let использовать_проверенные = rand::random::<bool>();
 
-        if use_tried {
-            self.select_from_tried().or_else(|| self.select_from_new())
+        if использовать_проверенные {
+            self.выбрать_из_проверенных().or_else(|| self.выбрать_из_новых())
         } else {
-            self.select_from_new().or_else(|| self.select_from_tried())
+            self.выбрать_из_новых().or_else(|| self.выбрать_из_проверенных())
         }
     }
 
-    /// Выбрать из tried
-    fn select_from_tried(&self) -> Option<NetAddr> {
-        if self.tried_addrs.is_empty() {
+    /// Выбрать из проверенных
+    fn выбрать_из_проверенных(&self) -> Option<СетевойАдрес> {
+        if self.проверенные.is_empty() {
             return None;
         }
 
-        let bucket_idx = rand::random::<usize>() % self.tried_buckets;
-        self.tried_addrs.get(&bucket_idx).and_then(|addrs| {
-            if addrs.is_empty() {
+        let индекс_бакета = rand::random::<usize>() % self.количество_проверенных_бакетов;
+        self.проверенные.get(&индекс_бакета).and_then(|адреса| {
+            if адреса.is_empty() {
                 None
             } else {
-                let idx = rand::random::<usize>() % addrs.len();
-                Some(addrs[idx].clone())
+                let индекс = rand::random::<usize>() % адреса.len();
+                Some(адреса[индекс].clone())
             }
         })
     }
 
-    /// Выбрать из new
-    fn select_from_new(&self) -> Option<NetAddr> {
-        if self.new_addrs.is_empty() {
+    /// Выбрать из новых
+    fn выбрать_из_новых(&self) -> Option<СетевойАдрес> {
+        if self.новые.is_empty() {
             return None;
         }
 
-        let bucket_idx = rand::random::<usize>() % self.new_buckets;
-        self.new_addrs.get(&bucket_idx).and_then(|addrs| {
-            if addrs.is_empty() {
+        let индекс_бакета = rand::random::<usize>() % self.количество_новых_бакетов;
+        self.новые.get(&индекс_бакета).and_then(|адреса| {
+            if адреса.is_empty() {
                 None
             } else {
-                let idx = rand::random::<usize>() % addrs.len();
-                Some(addrs[idx].clone())
+                let индекс = rand::random::<usize>() % адреса.len();
+                Some(адреса[индекс].clone())
             }
         })
     }
 
     /// Получить количество адресов
-    pub fn count(&self) -> (usize, usize) {
-        let new_count: usize = self.new_addrs.values().map(|v| v.len()).sum();
-        let tried_count: usize = self.tried_addrs.values().map(|v| v.len()).sum();
-        (new_count, tried_count)
+    pub fn количество(&self) -> (usize, usize) {
+        let новых: usize = self.новые.values().map(|v| v.len()).sum();
+        let проверенных: usize = self.проверенные.values().map(|v| v.len()).sum();
+        (новых, проверенных)
     }
 }
 
-impl Default for AddrManager {
+impl Default for МенеджерАдресов {
     fn default() -> Self {
-        Self::new()
+        Self::новый()
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                              СТАТИСТИКА ПИРА
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /// Идентификатор пира
-pub type PeerId = [u8; 32];
+pub type ИдПира = [u8; 32];
 
 /// Статистика пира
 #[derive(Clone, Debug, Default)]
-pub struct PeerStats {
+pub struct СтатистикаПира {
     /// Количество валидных сообщений
-    pub valid_count: u64,
+    pub валидных: u64,
 
     /// Количество невалидных сообщений
-    pub invalid_count: u64,
+    pub невалидных: u64,
 
     /// Время последнего сообщения
-    pub last_message: u64,
+    pub последнее_сообщение: u64,
 
     /// Средняя задержка (мс)
-    pub avg_latency_ms: u64,
+    pub средняя_задержка_мс: u64,
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                              РАСПРОСТРАНЕНИЕ ПОДПИСЕЙ
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /// Протокол распространения подписей
-pub struct SignatureGossip {
+pub struct РаспространениеПодписей {
     /// Очередь подписей для отправки
-    outbound_queue: VecDeque<PresenceProof>,
+    очередь_исходящих: VecDeque<ДоказательствоПрисутствия>,
 
-    /// Фильтр виденных подписей (хеши)
-    seen_filter: HashSet<[u8; 32]>,
+    /// Фильтр виденных подписей
+    виденные: HashSet<[u8; 32]>,
 
     /// Статистика по пирам
-    peer_stats: HashMap<PeerId, PeerStats>,
+    статистика_пиров: HashMap<ИдПира, СтатистикаПира>,
 
     /// Локальный пул подписей
-    local_pool: Vec<PresenceProof>,
+    локальный_пул: Vec<ДоказательствоПрисутствия>,
 
     /// Максимум подписей в пуле
-    max_pool_size: usize,
+    максимум_пула: usize,
 }
 
-impl SignatureGossip {
-    /// Создать новый протокол gossip
-    pub fn new() -> Self {
+impl РаспространениеПодписей {
+    /// Создать новый протокол
+    pub fn новый() -> Self {
         Self {
-            outbound_queue: VecDeque::new(),
-            seen_filter: HashSet::new(),
-            peer_stats: HashMap::new(),
-            local_pool: Vec::new(),
-            max_pool_size: 10_000,
+            очередь_исходящих: VecDeque::new(),
+            виденные: HashSet::new(),
+            статистика_пиров: HashMap::new(),
+            локальный_пул: Vec::new(),
+            максимум_пула: 10_000,
         }
     }
 
     /// Обработать входящую подпись
-    pub fn on_signature(&mut self, sig: PresenceProof, from: PeerId, current_tau2: u64) -> bool {
-        let sig_hash = sig.hash();
+    pub fn при_подписи(&mut self, подпись: ДоказательствоПрисутствия, от: ИдПира, текущий_τ2: u64) -> bool {
+        let хеш_подписи = подпись.hash();
 
-        // Проверка на дубликат
-        if self.seen_filter.contains(&sig_hash) {
+        if self.виденные.contains(&хеш_подписи) {
             return false;
         }
-        self.seen_filter.insert(sig_hash);
+        self.виденные.insert(хеш_подписи);
 
-        // Валидация подписи
-        if !sig.verify(current_tau2) {
-            if let Some(stats) = self.peer_stats.get_mut(&from) {
-                stats.invalid_count += 1;
+        if !подпись.verify(текущий_τ2) {
+            if let Some(статистика) = self.статистика_пиров.get_mut(&от) {
+                статистика.невалидных += 1;
             }
             return false;
         }
 
-        // Обновить статистику пира
-        if let Some(stats) = self.peer_stats.get_mut(&from) {
-            stats.valid_count += 1;
-            stats.last_message = std::time::SystemTime::now()
+        if let Some(статистика) = self.статистика_пиров.get_mut(&от) {
+            статистика.валидных += 1;
+            статистика.последнее_сообщение = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
         }
 
-        // Добавить в локальный пул
-        if self.local_pool.len() < self.max_pool_size {
-            self.local_pool.push(sig.clone());
+        if self.локальный_пул.len() < self.максимум_пула {
+            self.локальный_пул.push(подпись.clone());
         }
 
-        // Добавить в очередь на рассылку
-        self.outbound_queue.push_back(sig);
-
+        self.очередь_исходящих.push_back(подпись);
         true
     }
 
     /// Получить следующую подпись для отправки
-    pub fn next_outbound(&mut self) -> Option<PresenceProof> {
-        self.outbound_queue.pop_front()
+    pub fn следующая_исходящая(&mut self) -> Option<ДоказательствоПрисутствия> {
+        self.очередь_исходящих.pop_front()
     }
 
     /// Зарегистрировать пира
-    pub fn register_peer(&mut self, peer_id: PeerId) {
-        self.peer_stats.insert(peer_id, PeerStats::default());
+    pub fn зарегистрировать_пира(&mut self, ид_пира: ИдПира) {
+        self.статистика_пиров.insert(ид_пира, СтатистикаПира::default());
     }
 
     /// Удалить пира
-    pub fn remove_peer(&mut self, peer_id: &PeerId) {
-        self.peer_stats.remove(peer_id);
+    pub fn удалить_пира(&mut self, ид_пира: &ИдПира) {
+        self.статистика_пиров.remove(ид_пира);
     }
 
-    /// Получить подписи из пула
-    pub fn get_pool(&self) -> &[PresenceProof] {
-        &self.local_pool
+    /// Получить пул
+    pub fn пул(&self) -> &[ДоказательствоПрисутствия] {
+        &self.локальный_пул
     }
 
-    /// Очистить пул (после закрытия τ₂)
-    pub fn clear_pool(&mut self) {
-        self.local_pool.clear();
-        self.seen_filter.clear();
+    /// Очистить пул
+    pub fn очистить_пул(&mut self) {
+        self.локальный_пул.clear();
+        self.виденные.clear();
     }
 
     /// Получить статистику пира
-    pub fn get_peer_stats(&self, peer_id: &PeerId) -> Option<&PeerStats> {
-        self.peer_stats.get(peer_id)
+    pub fn статистика_пира(&self, ид_пира: &ИдПира) -> Option<&СтатистикаПира> {
+        self.статистика_пиров.get(ид_пира)
     }
 }
 
-impl Default for SignatureGossip {
+impl Default for РаспространениеПодписей {
     fn default() -> Self {
-        Self::new()
+        Self::новый()
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                              ЗДОРОВЬЕ СЕТИ
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /// Метрики здоровья сети
 #[derive(Clone, Debug)]
-pub struct NetworkHealth {
+pub struct ЗдоровьеСети {
     /// Количество активных соединений
-    pub connections: usize,
+    pub соединений: usize,
 
     /// Количество различных подсетей
-    pub netgroups: usize,
+    pub подсетей: usize,
 
     /// Среднее время отклика (мс)
-    pub avg_latency_ms: u64,
+    pub средняя_задержка_мс: u64,
 
     /// Количество подписей за последний τ₂
-    pub signatures_per_tau2: usize,
+    pub подписей_за_τ2: usize,
 }
 
-impl NetworkHealth {
+impl ЗдоровьеСети {
     /// Оценка здоровья сети (0.0 - 1.0)
-    pub fn score(&self) -> f64 {
-        let limits = ConnectionLimits::default();
+    pub fn оценка(&self) -> f64 {
+        let лимиты = ЛимитыСоединений::default();
 
-        // Оценка соединений (0-10 → 0-1)
-        let conn_score = (self.connections as f64 / 10.0).min(1.0);
-
-        // Оценка разнообразия подсетей
-        let ng_score = (self.netgroups as f64 / limits.min_netgroups as f64).min(1.0);
-
-        // Оценка задержки (500мс = плохо, 50мс = хорошо)
-        let latency_score = if self.avg_latency_ms == 0 {
+        let оценка_соединений = (self.соединений as f64 / 10.0).min(1.0);
+        let оценка_подсетей = (self.подсетей as f64 / лимиты.минимум_подсетей as f64).min(1.0);
+        let оценка_задержки = if self.средняя_задержка_мс == 0 {
             0.5
         } else {
-            (500.0 / self.avg_latency_ms as f64).min(1.0)
+            (500.0 / self.средняя_задержка_мс as f64).min(1.0)
         };
 
-        // Средняя оценка
-        (conn_score + ng_score + latency_score) / 3.0
+        (оценка_соединений + оценка_подсетей + оценка_задержки) / 3.0
     }
 
     /// Сеть здорова?
-    pub fn is_healthy(&self) -> bool {
-        self.score() > 0.6
+    pub fn здорова(&self) -> bool {
+        self.оценка() > 0.6
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//                              P2P СООБЩЕНИЯ
+// ═══════════════════════════════════════════════════════════════════════════════
+
 /// Типы P2P сообщений
 #[derive(Clone, Debug)]
-pub enum P2PMessage {
+pub enum P2PСообщение {
     /// Рукопожатие
-    Version {
-        version: u32,
-        services: u64,
-        timestamp: u64,
-        nonce: u64,
+    Версия {
+        версия: u32,
+        сервисы: u64,
+        метка_времени: u64,
+        одноразовый_номер: u64,
     },
 
     /// Подпись присутствия
-    Presence(PresenceProof),
+    Присутствие(ДоказательствоПрисутствия),
 
     /// Адреса узлов
-    Addr(Vec<NetAddr>),
+    Адреса(Vec<СетевойАдрес>),
 
     /// Запрос адресов
-    GetAddr,
+    ЗапросАдресов,
 
-    /// Ping
-    Ping(u64),
+    /// Пинг
+    Пинг(u64),
 
-    /// Pong
-    Pong(u64),
+    /// Понг
+    Понг(u64),
 }
 
-impl P2PMessage {
+impl P2PСообщение {
     /// Получить тип сообщения
-    pub fn message_type(&self) -> &'static str {
+    pub fn тип(&self) -> &'static str {
         match self {
-            Self::Version { .. } => "VERSION",
-            Self::Presence(_) => "PRESENCE",
-            Self::Addr(_) => "ADDR",
-            Self::GetAddr => "GETADDR",
-            Self::Ping(_) => "PING",
-            Self::Pong(_) => "PONG",
+            Self::Версия { .. } => "ВЕРСИЯ",
+            Self::Присутствие(_) => "ПРИСУТСТВИЕ",
+            Self::Адреса(_) => "АДРЕСА",
+            Self::ЗапросАдресов => "ЗАПРОС_АДРЕСОВ",
+            Self::Пинг(_) => "ПИНГ",
+            Self::Понг(_) => "ПОНГ",
         }
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//                         СОВМЕСТИМЫЕ ПСЕВДОНИМЫ
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub use СетевойАдрес as NetAddr;
+pub use МенеджерАдресов as AddrManager;
+pub use РаспространениеПодписей as SignatureGossip;
+pub use ЗдоровьеСети as NetworkHealth;
+
+// Совместимость: английские методы для экономического модуля
+impl МенеджерАдресов {
+    pub fn new() -> Self { Self::новый() }
+    pub fn count(&self) -> (usize, usize) { self.количество() }
+}
+
+impl РаспространениеПодписей {
+    pub fn new() -> Self { Self::новый() }
+}
+
+impl ЗдоровьеСети {
+    pub fn connections(&self) -> usize { self.соединений }
+    pub fn netgroups(&self) -> usize { self.подсетей }
+    pub fn avg_latency_ms(&self) -> u64 { self.средняя_задержка_мс }
+    pub fn signatures_per_tau2(&self) -> usize { self.подписей_за_τ2 }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 ТЕСТЫ
+// ═══════════════════════════════════════════════════════════════════════════════
+
 #[cfg(test)]
-mod tests {
+mod тесты {
     use super::*;
     use std::net::Ipv4Addr;
 
     #[test]
-    fn test_netaddr_routable() {
-        let public = NetAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 8333);
-        let private = NetAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 8333);
-        let localhost = NetAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8333);
+    fn тест_маршрутизируемости_адреса() {
+        let публичный = СетевойАдрес::новый(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 8333);
+        let приватный = СетевойАдрес::новый(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)), 8333);
+        let локальный = СетевойАдрес::новый(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8333);
 
-        assert!(public.is_routable());
-        assert!(!private.is_routable());
-        assert!(!localhost.is_routable());
+        assert!(публичный.маршрутизируемый());
+        assert!(!приватный.маршрутизируемый());
+        assert!(!локальный.маршрутизируемый());
     }
 
     #[test]
-    fn test_addr_manager() {
-        let mut mgr = AddrManager::new();
-        let source = NetAddr::new(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 8333);
-        let addr = NetAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 8333);
+    fn тест_менеджера_адресов() {
+        let mut менеджер = МенеджерАдресов::новый();
+        let источник = СетевойАдрес::новый(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), 8333);
+        let адрес = СетевойАдрес::новый(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 8333);
 
-        assert!(mgr.add_new(addr.clone(), &source));
+        assert!(менеджер.добавить_новый(адрес.clone(), &источник));
 
-        let (new_count, _) = mgr.count();
-        assert_eq!(new_count, 1);
+        let (новых, _) = менеджер.количество();
+        assert_eq!(новых, 1);
     }
 
     #[test]
-    fn test_network_health() {
-        let health = NetworkHealth {
-            connections: 10,
-            netgroups: 5,
-            avg_latency_ms: 100,
-            signatures_per_tau2: 1000,
+    fn тест_здоровья_сети() {
+        let здоровье = ЗдоровьеСети {
+            соединений: 10,
+            подсетей: 5,
+            средняя_задержка_мс: 100,
+            подписей_за_τ2: 1000,
         };
 
-        assert!(health.is_healthy());
-        assert!(health.score() > 0.6);
+        assert!(здоровье.здорова());
+        assert!(здоровье.оценка() > 0.6);
     }
 }

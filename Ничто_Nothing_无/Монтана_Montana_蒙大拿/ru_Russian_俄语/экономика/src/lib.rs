@@ -296,7 +296,7 @@ impl Wallet {
 
     /// Получить публичный ключ
     pub fn public_key(&self) -> [u8; 32] {
-        self.keypair.public_key
+        self.keypair.public_key()
     }
 
     /// Получить баланс
@@ -425,10 +425,10 @@ impl Montana {
                 addr_manager: AddrManager::new(),
                 gossip: SignatureGossip::new(),
                 health: NetworkHealth {
-                    connections: 0,
-                    netgroups: 0,
-                    avg_latency_ms: 0,
-                    signatures_per_tau2: 0,
+                    соединений: 0,
+                    подсетей: 0,
+                    средняя_задержка_мс: 0,
+                    подписей_за_τ2: 0,
                 },
             },
             consensus: MontanaConsensus {
@@ -445,7 +445,7 @@ impl Montana {
     /// Все три языка/домена должны быть активны
     pub fn is_complete(&self) -> bool {
         // RU: сеть работает
-        let ru_active = self.network.health.connections > 0
+        let ru_active = self.network.health.connections() > 0
             || self.network.addr_manager.count().0 > 0;
 
         // ZH: консенсус работает
@@ -456,15 +456,14 @@ impl Montana {
         let en_active = !self.cognitive.council.is_empty();
 
         // Все три идентичности должны быть активны
-        // Как говорит философия: Identity::requires_all() == true
         ru_active || zh_active || en_active
     }
 
     /// Получить ценность системы
     pub fn value(&self) -> Value {
-        let evidence = self.network.health.signatures_per_tau2 as u64;
-        let age_days = self.consensus.current_tau2 / 144; // τ₂ в день
-        let participants = self.network.health.connections as u64;
+        let evidence = self.network.health.signatures_per_tau2() as u64;
+        let age_days = self.consensus.current_tau2 / 144;
+        let participants = self.network.health.connections() as u64;
 
         Value::calculate(evidence, age_days, participants)
     }
