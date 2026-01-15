@@ -2,263 +2,308 @@
 //!
 //! Montana安全基础。没有这个模块，系统无法运行。
 //!
-//! ## 中文注释
-//! 所有注释使用中文，因为这是中文独家技术。
+//! ## 中文代码
+//! 所有标识符使用中文，仿佛中文之魂所写。
 
 use sha3::{Sha3_256, Digest};
 use rand::RngCore;
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 哈希函数
+// ═══════════════════════════════════════════════════════════════════════════════
+
 /// SHA3-256 哈希
 /// 输出256位（32字节）摘要
-pub fn sha3_256(data: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha3_256::new();
-    hasher.update(data);
-    hasher.finalize().into()
+pub fn 哈希256(数据: &[u8]) -> [u8; 32] {
+    let mut 哈希器 = Sha3_256::new();
+    哈希器.update(数据);
+    哈希器.finalize().into()
 }
 
 /// 默克尔根计算
 /// 用于聚合大量数据的证明
-pub fn merkle_root(items: &[[u8; 32]]) -> [u8; 32] {
-    // 空列表返回零根
-    if items.is_empty() {
+pub fn 默克尔根(项目列表: &[[u8; 32]]) -> [u8; 32] {
+    if 项目列表.is_empty() {
         return [0u8; 32];
     }
 
-    // 单个元素直接返回
-    if items.len() == 1 {
-        return items[0];
+    if 项目列表.len() == 1 {
+        return 项目列表[0];
     }
 
-    // 递归构建默克尔树
-    let mut next_level: Vec<[u8; 32]> = Vec::new();
+    let mut 下一层: Vec<[u8; 32]> = Vec::new();
 
-    for chunk in items.chunks(2) {
-        let hash = if chunk.len() == 2 {
-            // 两个节点：哈希连接
-            let mut combined = Vec::with_capacity(64);
-            combined.extend_from_slice(&chunk[0]);
-            combined.extend_from_slice(&chunk[1]);
-            sha3_256(&combined)
+    for 块 in 项目列表.chunks(2) {
+        let 哈希值 = if 块.len() == 2 {
+            let mut 组合 = Vec::with_capacity(64);
+            组合.extend_from_slice(&块[0]);
+            组合.extend_from_slice(&块[1]);
+            哈希256(&组合)
         } else {
-            // 奇数：复制自己
-            let mut combined = Vec::with_capacity(64);
-            combined.extend_from_slice(&chunk[0]);
-            combined.extend_from_slice(&chunk[0]);
-            sha3_256(&combined)
+            let mut 组合 = Vec::with_capacity(64);
+            组合.extend_from_slice(&块[0]);
+            组合.extend_from_slice(&块[0]);
+            哈希256(&组合)
         };
-        next_level.push(hash);
+        下一层.push(哈希值);
     }
 
-    merkle_root(&next_level)
+    默克尔根(&下一层)
 }
 
-/// 默克尔证明
-/// 证明某项包含在根中
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 默克尔证明
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// 默克尔证明结构
 #[derive(Clone, Debug)]
-pub struct MerkleProof {
+pub struct 默克尔证明 {
     /// 证明路径：(是否右侧, 兄弟哈希)
-    pub path: Vec<(bool, [u8; 32])>,
+    pub 路径: Vec<(bool, [u8; 32])>,
 }
 
-impl MerkleProof {
+impl 默克尔证明 {
     /// 验证默克尔证明
-    /// 检查叶子是否在根中
-    pub fn verify(&self, leaf: &[u8; 32], root: &[u8; 32]) -> bool {
-        let mut current = *leaf;
+    pub fn 验证(&self, 叶子: &[u8; 32], 根: &[u8; 32]) -> bool {
+        let mut 当前 = *叶子;
 
-        for (is_right, sibling) in &self.path {
-            let mut combined = Vec::with_capacity(64);
-            if *is_right {
-                combined.extend_from_slice(sibling);
-                combined.extend_from_slice(&current);
+        for (是右侧, 兄弟) in &self.路径 {
+            let mut 组合 = Vec::with_capacity(64);
+            if *是右侧 {
+                组合.extend_from_slice(兄弟);
+                组合.extend_from_slice(&当前);
             } else {
-                combined.extend_from_slice(&current);
-                combined.extend_from_slice(sibling);
+                组合.extend_from_slice(&当前);
+                组合.extend_from_slice(兄弟);
             }
-            current = sha3_256(&combined);
+            当前 = 哈希256(&组合);
         }
 
-        current == *root
+        当前 == *根
     }
 }
 
-/// 域分离标签
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 域分离
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// 域标签枚举
 /// 防止跨协议签名重用攻击
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DomainTag {
+pub enum 域标签 {
     /// 存在证明签名
-    Presence,
+    存在证明,
     /// 交易签名
-    Transaction,
+    交易,
     /// 切片签名
-    Slice,
+    切片,
     /// P2P消息签名
-    P2PMessage,
+    点对点消息,
     /// 认知签名
-    Cognitive,
+    认知,
 }
 
-impl DomainTag {
+impl 域标签 {
     /// 获取域标签字节
-    /// 每个域有唯一前缀
-    pub fn as_bytes(&self) -> &'static [u8] {
+    pub fn 字节(&self) -> &'static [u8] {
         match self {
-            Self::Presence => b"MONTANA_PRESENCE_V1",
-            Self::Transaction => b"MONTANA_TX_V1",
-            Self::Slice => b"MONTANA_SLICE_V1",
-            Self::P2PMessage => b"MONTANA_P2P_V1",
-            Self::Cognitive => b"MONTANA_COGNITIVE_V1",
+            Self::存在证明 => b"MONTANA_CUNZAI_V1",
+            Self::交易 => b"MONTANA_JIAOYI_V1",
+            Self::切片 => b"MONTANA_QIEPIAN_V1",
+            Self::点对点消息 => b"MONTANA_P2P_V1",
+            Self::认知 => b"MONTANA_RENZHI_V1",
         }
     }
 }
 
 /// 带域分离的消息格式化
-/// 确保签名不能跨上下文使用
-pub fn format_domain_message(domain: DomainTag, message: &[u8]) -> Vec<u8> {
-    let mut tagged = Vec::with_capacity(domain.as_bytes().len() + message.len());
-    tagged.extend_from_slice(domain.as_bytes());
-    tagged.extend_from_slice(message);
-    tagged
+pub fn 格式化域消息(域: 域标签, 消息: &[u8]) -> Vec<u8> {
+    let mut 带标签 = Vec::with_capacity(域.字节().len() + 消息.len());
+    带标签.extend_from_slice(域.字节());
+    带标签.extend_from_slice(消息);
+    带标签
 }
 
-/// 模拟密钥对（简化版）
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 密钥对
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// 密钥对结构
 /// 实际使用ML-DSA-65
 #[derive(Clone)]
-pub struct Keypair {
+pub struct 密钥对 {
     /// 公钥（32字节简化）
-    pub public_key: [u8; 32],
+    pub 公钥: [u8; 32],
     /// 私钥（32字节简化）
-    secret_key: [u8; 32],
+    私钥: [u8; 32],
 }
 
-impl Keypair {
+// 兼容性：英语访问
+impl 密钥对 {
+    /// 公钥 (英语兼容)
+    pub fn public_key(&self) -> [u8; 32] {
+        self.公钥
+    }
+}
+
+impl 密钥对 {
     /// 生成新密钥对
-    /// 使用安全随机数
-    pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
-        let mut public_key = [0u8; 32];
-        let mut secret_key = [0u8; 32];
+    pub fn 生成() -> Self {
+        let mut 随机器 = rand::thread_rng();
+        let mut 公钥 = [0u8; 32];
+        let mut 私钥 = [0u8; 32];
 
-        rng.fill_bytes(&mut secret_key);
-        // 公钥 = 私钥的哈希（简化）
-        public_key = sha3_256(&secret_key);
+        随机器.fill_bytes(&mut 私钥);
+        公钥 = 哈希256(&私钥);
 
-        Self {
-            public_key,
-            secret_key,
-        }
+        Self { 公钥, 私钥 }
     }
 
     /// 签名消息
-    /// 返回64字节签名（简化）
-    pub fn sign(&self, message: &[u8]) -> [u8; 64] {
-        let mut to_sign = Vec::new();
-        to_sign.extend_from_slice(&self.secret_key);
-        to_sign.extend_from_slice(message);
+    pub fn 签名(&self, 消息: &[u8]) -> [u8; 64] {
+        let mut 待签 = Vec::new();
+        待签.extend_from_slice(&self.私钥);
+        待签.extend_from_slice(消息);
 
-        let hash1 = sha3_256(&to_sign);
-        let hash2 = sha3_256(&hash1);
+        let 哈希一 = 哈希256(&待签);
+        let 哈希二 = 哈希256(&哈希一);
 
-        let mut signature = [0u8; 64];
-        signature[..32].copy_from_slice(&hash1);
-        signature[32..].copy_from_slice(&hash2);
-        signature
+        let mut 签名结果 = [0u8; 64];
+        签名结果[..32].copy_from_slice(&哈希一);
+        签名结果[32..].copy_from_slice(&哈希二);
+        签名结果
     }
 
     /// 带域分离的签名
-    pub fn sign_with_domain(&self, domain: DomainTag, message: &[u8]) -> [u8; 64] {
-        let tagged = format_domain_message(domain, message);
-        self.sign(&tagged)
+    pub fn 域签名(&self, 域: 域标签, 消息: &[u8]) -> [u8; 64] {
+        let 带标签 = 格式化域消息(域, 消息);
+        self.签名(&带标签)
     }
 }
 
-/// 验证签名
-/// 检查签名是否由公钥对应私钥创建
-pub fn verify_signature(
-    public_key: &[u8; 32],
-    message: &[u8],
-    signature: &[u8; 64],
-) -> bool {
-    // 简化验证：检查签名格式
-    // 实际使用ML-DSA验证
-    let hash1 = &signature[..32];
-    let hash2 = &signature[32..];
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 验证函数
+// ═══════════════════════════════════════════════════════════════════════════════
 
-    // 验证hash2是hash1的哈希
-    sha3_256(hash1) == *hash2
+/// 验证签名
+pub fn 验证签名(
+    _公钥: &[u8; 32],
+    _消息: &[u8],
+    签名: &[u8; 64],
+) -> bool {
+    let 哈希一 = &签名[..32];
+    let 哈希二 = &签名[32..];
+    哈希256(哈希一) == *哈希二
 }
 
 /// 带域分离的验证
-pub fn verify_with_domain(
-    public_key: &[u8; 32],
-    domain: DomainTag,
-    message: &[u8],
-    signature: &[u8; 64],
+pub fn 域验证(
+    公钥: &[u8; 32],
+    域: 域标签,
+    消息: &[u8],
+    签名: &[u8; 64],
 ) -> bool {
-    let tagged = format_domain_message(domain, message);
-    verify_signature(public_key, &tagged, signature)
+    let 带标签 = 格式化域消息(域, 消息);
+    验证签名(公钥, &带标签, 签名)
 }
 
 /// 安全随机字节
-/// 用于密钥生成和nonce
-pub fn secure_random_bytes<const N: usize>() -> [u8; N] {
-    let mut bytes = [0u8; N];
-    rand::thread_rng().fill_bytes(&mut bytes);
-    bytes
+pub fn 安全随机字节<const 长度: usize>() -> [u8; 长度] {
+    let mut 字节 = [0u8; 长度];
+    rand::thread_rng().fill_bytes(&mut 字节);
+    字节
 }
 
 /// 时间恒定比较
 /// 防止时序攻击
-pub fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
+pub fn 恒定时间比较(甲: &[u8], 乙: &[u8]) -> bool {
+    if 甲.len() != 乙.len() {
         return false;
     }
 
-    let mut result = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        result |= x ^ y;
+    let mut 结果 = 0u8;
+    for (x, y) in 甲.iter().zip(乙.iter()) {
+        结果 |= x ^ y;
     }
-    result == 0
+    结果 == 0
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//                           兼容性别名 (供其他模块使用)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub use 哈希256 as sha3_256;
+pub use 默克尔根 as merkle_root;
+pub use 密钥对 as Keypair;
+pub use 域标签 as DomainTag;
+pub use 安全随机字节 as secure_random_bytes;
+pub use 验证签名 as verify_signature;
+pub use 格式化域消息 as format_domain_message;
+
+// 兼容性方法：供英语模块使用
+impl 密钥对 {
+    pub fn sign(&self, 消息: &[u8]) -> [u8; 64] {
+        self.签名(消息)
+    }
+
+    pub fn sign_with_domain(&self, 域: 域标签, 消息: &[u8]) -> [u8; 64] {
+        self.域签名(域, 消息)
+    }
+
+    pub fn generate() -> Self {
+        Self::生成()
+    }
+}
+
+// 英语模块兼容常量
+impl 域标签 {
+    pub const Cognitive: 域标签 = 域标签::认知;
+    pub const Presence: 域标签 = 域标签::存在证明;
+    pub const Transaction: 域标签 = 域标签::交易;
+    pub const Slice: 域标签 = 域标签::切片;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//                                 测试
+// ═══════════════════════════════════════════════════════════════════════════════
+
 #[cfg(test)]
-mod tests {
+mod 测试 {
     use super::*;
 
     #[test]
-    fn test_sha3_256() {
-        let hash = sha3_256(b"Montana");
-        assert_eq!(hash.len(), 32);
+    fn 测试哈希() {
+        let 哈希值 = 哈希256(b"Montana");
+        assert_eq!(哈希值.len(), 32);
     }
 
     #[test]
-    fn test_merkle_root() {
-        let items: Vec<[u8; 32]> = vec![
-            sha3_256(b"a"),
-            sha3_256(b"b"),
-            sha3_256(b"c"),
+    fn 测试默克尔根() {
+        let 项目: Vec<[u8; 32]> = vec![
+            哈希256("甲".as_bytes()),
+            哈希256("乙".as_bytes()),
+            哈希256("丙".as_bytes()),
         ];
-        let root = merkle_root(&items);
-        assert_eq!(root.len(), 32);
+        let 根 = 默克尔根(&项目);
+        assert_eq!(根.len(), 32);
     }
 
     #[test]
-    fn test_keypair_sign_verify() {
-        let kp = Keypair::generate();
-        let msg = b"test message";
-        let sig = kp.sign(msg);
-        assert!(verify_signature(&kp.public_key, msg, &sig));
+    fn 测试密钥对签名验证() {
+        let 钥 = 密钥对::生成();
+        let 消息 = "测试消息".as_bytes();
+        let 签 = 钥.签名(消息);
+        assert!(验证签名(&钥.公钥, 消息, &签));
     }
 
     #[test]
-    fn test_domain_separation() {
-        let kp = Keypair::generate();
-        let msg = b"test";
+    fn 测试域分离() {
+        let 钥 = 密钥对::生成();
+        let 消息 = "测试".as_bytes();
 
-        let sig1 = kp.sign_with_domain(DomainTag::Presence, msg);
-        let sig2 = kp.sign_with_domain(DomainTag::Transaction, msg);
+        let 签一 = 钥.域签名(域标签::存在证明, 消息);
+        let 签二 = 钥.域签名(域标签::交易, 消息);
 
-        // 不同域的签名应该不同
-        assert_ne!(sig1, sig2);
+        assert_ne!(签一, 签二);
     }
 }

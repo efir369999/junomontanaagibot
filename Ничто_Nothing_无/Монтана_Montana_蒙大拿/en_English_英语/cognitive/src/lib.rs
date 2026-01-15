@@ -47,7 +47,7 @@ impl CognitiveSignature {
         let signature = keypair.sign_with_domain(DomainTag::Cognitive, &message);
 
         Self {
-            pubkey: keypair.public_key,
+            pubkey: keypair.public_key(),
             model_id: model_id.to_string(),
             session_hash,
             timestamp,
@@ -167,7 +167,7 @@ impl CognitiveIdentity {
             name: name.to_string(),
             model_id: model_id.to_string(),
             organization: organization.to_string(),
-            pubkey: keypair.public_key,
+            pubkey: keypair.public_key(),
             genesis_sig,
             role,
         }
