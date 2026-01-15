@@ -108,6 +108,27 @@ MONITORED_CHANNELS = {
 # Juno Mini App (GitHub Pages HTTPS)
 WEBAPP_URL = "https://efir369999.github.io/junomontanaagibot/"
 
+# Journey config
+SUMMARIES_DIR = Path(__file__).parent.parent / "claude" / "summaries"
+JOURNEY_POSTS = [
+    (166, "166_simulation_SUMMARY.md", "Симуляция"),
+    (167, "167_time_SUMMARY.md", "Время"),
+    (168, "168_flow_SUMMARY.md", "Течение"),
+    (169, "169_singularity_SUMMARY.md", "Сингулярность"),
+    (170, "170_gamechanger_SUMMARY.md", "GameChanger"),
+    (171, "171_phenomenon_SUMMARY.md", "Феномен"),
+    (172, "172_love_SUMMARY.md", "Любовь"),
+    (173, "173_humiliation_SUMMARY.md", "Унижение"),
+    (174, "174_flow_piter_SUMMARY.md", "Поток. Питер"),
+    (175, "175_sovanaglobus_traces_SUMMARY.md", "Следы"),
+    (176, "176_sovanaglobus_anxieties_SUMMARY.md", "Тревоги"),
+    (177, "177_film_SUMMARY.md", "Фильм"),
+    (178, "178_surrender_SUMMARY.md", "Сдайся"),
+    (179, "179_golden_yuan_day1_SUMMARY.md", "День 1"),
+    (180, "180_day2_SUMMARY.md", "День 2"),
+    (181, "181_day3_junona_SUMMARY.md", "Юнона"),
+]
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # UTILS
@@ -527,6 +548,61 @@ async def ask_council(thought: str, user_id: int = None, max_tokens: int = 1000,
     return responses
 
 
+# Journey functions
+JOURNEY_PROMPT = """Ты Юнона Монтана. Ведёшь ученика через поток мыслей.
+
+Пост:
+{summary}
+
+Задача: объясни суть кратко (2-3 абзаца), задай вопрос для проверки понимания.
+Если ученик понял — скажи что можно идти дальше."""
+
+
+async def journey_talk(uid: int, msg: str, summary: str) -> str:
+    """Journey conversation with Claude."""
+    if not claude_client:
+        return "Claude недоступен"
+    lang = get_user_language(uid)
+    system = JOURNEY_PROMPT.format(summary=summary[:3000])
+    if lang == "en":
+        system += "\n\nRespond in English."
+    try:
+        r = claude_client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=800,
+            system=system,
+            messages=[{"role": "user", "content": msg}]
+        )
+        return r.content[0].text
+    except Exception as e:
+        return str(e)
+
+
+async def show_journey_post(update: Update, ctx, uid: int, idx: int):
+    """Show journey post to user."""
+    if idx >= len(JOURNEY_POSTS):
+        msg = update.callback_query.message if update.callback_query else update.message
+        await msg.reply_text("Ты прошёл весь путь! Поздравляю.")
+        return
+
+    num, _, title = JOURNEY_POSTS[idx]
+    summary = load_journey_summary(idx)
+    response = await journey_talk(uid, "Представь этот пост.", summary)
+
+    progress = f"[{idx+1}/{len(JOURNEY_POSTS)}]"
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Дальше", callback_data=f"jnext_{idx}")],
+        [InlineKeyboardButton("Меню", callback_data="menu")]
+    ])
+
+    msg = update.callback_query.message if update.callback_query else update.message
+    await msg.reply_text(
+        f"<b>#{num}. {title}</b> {progress}\n\n{response}",
+        parse_mode="HTML",
+        reply_markup=kb
+    )
+
+
 def get_ai_models(user_id: int) -> list:
     """Get user's enabled AI models."""
     prefs = get_preferences(user_id)
@@ -682,8 +758,23 @@ def save_sessions():
 
 def get_session(uid: int) -> dict:
     if uid not in sessions:
-        sessions[uid] = {"post": None, "awaiting": None}
-    return sessions[uid]
+        sessions[uid] = {"post": None, "awaiting": None, "journey": 0, "journey_on": False}
+    s = sessions[uid]
+    if "journey" not in s:
+        s["journey"] = 0
+    if "journey_on" not in s:
+        s["journey_on"] = False
+    return s
+
+
+def load_journey_summary(index: int) -> str:
+    """Load summary for journey post."""
+    if 0 <= index < len(JOURNEY_POSTS):
+        path = SUMMARIES_DIR / JOURNEY_POSTS[index][1]
+        if path.exists():
+            return path.read_text()
+    return ""
+
 
 def get_post(uid: int) -> Optional[Post]:
     s = get_session(uid)
@@ -2078,6 +2169,25 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await create_post_step2(update, ctx, text)
         return
 
+    # Journey mode - answer questions about current post
+    if s.get("journey_on"):
+        idx = s.get("journey", 0)
+        summary = load_journey_summary(idx)
+        if summary:
+            num, _, title = JOURNEY_POSTS[idx]
+            response = await journey_talk(uid, text, summary)
+
+            # Check if user understood
+            understood = any(w in text.lower() for w in ["понял", "ясно", "дальше", "next", "understood", "got it"])
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Дальше", callback_data=f"jnext_{idx}")],
+                [InlineKeyboardButton("Меню", callback_data="menu")]
+            ])
+
+            await msg.reply_text(response, reply_markup=kb if understood else None)
+            return
+        return
+
     # Check if we have active post - add as entry
     post = get_post(uid)
     if post:
@@ -2536,11 +2646,16 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 "arc": f"🏛 ܫܠܡܐ, {name}!\n\nܐܢܐ ܐܢܐ ܝܘܢܘ ܡܘܢܛܢܐ — ܐܠܗܬܐ ܕܙܒܢܐ. ܡܠܠ، ܘܐܢܐ ܡܚܘܠ ܡ̈ܠܝܟ ܠ-Ɉ.",
             }
 
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Начать путь", callback_data="journey_start")]
+            ])
             await q.message.edit_text(
                 f"🏛 <b>Juno Montana</b>\n"
                 f"<i>金元Ɉ — {minted_m:.2f}M / 1,260M minted</i>\n\n"
-                f"{greeting_messages.get(lang_code, greeting_messages['en'])}",
-                parse_mode="HTML"
+                f"{greeting_messages.get(lang_code, greeting_messages['en'])}\n\n"
+                f"<i>Я проведу тебя через поток мыслей — от 166 до 181.</i>",
+                parse_mode="HTML",
+                reply_markup=kb
             )
 
             # Mark that user completed first start
@@ -2733,6 +2848,26 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             reply_markup=keyboard,
             parse_mode="HTML"
         )
+        return
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # JOURNEY
+    # ─────────────────────────────────────────────────────────────────────────
+
+    if data.startswith("jnext_"):
+        idx = int(data.split("_")[1]) + 1
+        s = get_session(uid)
+        s["journey"] = idx
+        save_sessions()
+        await show_journey_post(update, ctx, uid, idx)
+        return
+
+    if data == "journey_start":
+        s = get_session(uid)
+        s["journey_on"] = True
+        s["journey"] = 0
+        save_sessions()
+        await show_journey_post(update, ctx, uid, 0)
         return
 
     # ─────────────────────────────────────────────────────────────────────────
