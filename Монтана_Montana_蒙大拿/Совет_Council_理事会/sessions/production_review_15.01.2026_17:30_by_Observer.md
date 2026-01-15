@@ -45,7 +45,7 @@ cargo check → SUCCESS (5 warnings)
 **Строк:** 433
 **Функции:**
 - `存在证明` — Presence Proof (τ₁/τ₂ binding)
-- `确定性彩票` — Deterministic Lottery (70/20/10 pools)
+- `确定性彩票` — Deterministic Lottery (80/20 — Full Nodes / Verified Users)
 - `切片` — Slice (Montana's "block")
 - `时间链` — Timechain
 

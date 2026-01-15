@@ -156,7 +156,7 @@ fn вычислить_бакет(&self, адрес: &СетевойАдрес, �
 2. ✅ 22/22 тестов пройдено
 3. ✅ Cross-module интеграция работает
 4. ✅ Eclipse protection реализована (Bitcoin-style bucketing)
-5. ✅ Lottery selection корректна (70/20/10)
+5. ✅ Lottery selection корректна (80/20 — Full Nodes / Verified Users)
 6. ⚠️ Warnings — стилевые, не блокируют
 7. ⚠️ Missing: rate limiting, Sybil protection — для v2
 

@@ -366,7 +366,7 @@ CARGO_TARGET_DIR=/tmp/montana_test cargo check
 - Tier 4: 4 года = 8,409,600 вес
 
 Лотерея:
-- Stage 1: 70% Full / 20% Light / 10% Client
+- Stage 1: 80% Full Nodes / 20% Verified Users
 - Stage 2: Weighted by accumulated presence
 ```
 
