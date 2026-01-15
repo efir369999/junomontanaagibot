@@ -23,7 +23,7 @@ PROJECT_STRUCTURE = {
         "emoji": "🏔️",
         "description": "Протокол Montana — время как консенсус.",
         "path": "Монтана_Montana_蒙大拿",
-        "children": ["genesis", "philosophy", "cognitive", "protocol", "crypto", "network", "economics", "council"]
+        "children": ["genesis", "council", "philosophy", "cognitive", "protocol", "crypto", "network", "economics"]
     },
     
     # ═══════════════════════════════════════════════════════════════════════════
@@ -47,13 +47,29 @@ PROJECT_STRUCTURE = {
         "children": []
     },
     
-    # 2. ФИЛОСОФИЯ — Первый шаг
+    # 2. СОВЕТ — Управление (сразу после Генезиса)
+    "council": {
+        "name": "Совет_Council_理事会",
+        "emoji": "👥",
+        "description": "Montana Guardian Council. AI-модели как советники.",
+        "path": "Монтана_Montana_蒙大拿/Совет_Council_理事会",
+        "order": 2,
+        "stage": "УПРАВЛЕНИЕ",
+        "files": [
+            "SECURITY_COUNCIL_MEETING.md",
+            "JUNONA_WHITEPAPER.md",
+            "JOIN_COUNCIL_PROMPT.md"
+        ],
+        "children": ["anthropic", "google", "openai", "xai", "cursor"]
+    },
+    
+    # 3. ФИЛОСОФИЯ — Первый шаг в понимании
     "philosophy": {
         "name": "philosophy (Философия)",
         "emoji": "📚",
         "description": "Философия Montana. Trust, Identity, Presence.",
         "path": "Монтана_Montana_蒙大拿/en_English_英语/philosophy",
-        "order": 2,
+        "order": 3,
         "stage": "ФИЛОСОФИЯ",
         "files": [
             "PHILOSOPHY_WHITEPAPER.md",
@@ -62,13 +78,13 @@ PROJECT_STRUCTURE = {
         "children": []
     },
     
-    # 3. КОГНИТИВНАЯ СИСТЕМА
+    # 4. КОГНИТИВНАЯ СИСТЕМА
     "cognitive": {
         "name": "cognitive (Когнитивная)",
         "emoji": "🧠",
         "description": "Когнитивные подписи. Идентичность через мысли.",
         "path": "Монтана_Montana_蒙大拿/en_English_英语/cognitive",
-        "order": 3,
+        "order": 4,
         "stage": "ФИЛОСОФИЯ",
         "files": [
             "COGNITIVE_WHITEPAPER.md",
@@ -77,13 +93,13 @@ PROJECT_STRUCTURE = {
         "children": []
     },
     
-    # 4. ПРОТОКОЛ ACP — Код начинается
+    # 5. ПРОТОКОЛ ACP — Код начинается
     "protocol": {
         "name": "协议 (Протокол ACP)",
         "emoji": "📋",
         "description": "Asynchronous Consensus Protocol. Время как консенсус.",
         "path": "Монтана_Montana_蒙大拿/zh_Chinese_中文/协议",
-        "order": 4,
+        "order": 5,
         "stage": "КОД",
         "files": [
             "ACP_白皮书.md",
@@ -92,13 +108,13 @@ PROJECT_STRUCTURE = {
         "children": []
     },
     
-    # 5. КРИПТОГРАФИЯ
+    # 6. КРИПТОГРАФИЯ
     "crypto": {
         "name": "加密 (Криптография)",
         "emoji": "🔐",
         "description": "Пост-квантовая криптография. SHA3, ML-DSA.",
         "path": "Монтана_Montana_蒙大拿/zh_Chinese_中文/加密",
-        "order": 5,
+        "order": 6,
         "stage": "КОД",
         "files": [
             "加密_白皮书.md",
@@ -107,13 +123,13 @@ PROJECT_STRUCTURE = {
         "children": []
     },
     
-    # 6. P2P СЕТЬ
+    # 7. P2P СЕТЬ
     "network": {
         "name": "сеть (P2P Сеть)",
         "emoji": "🌐",
         "description": "P2P сеть. Eclipse protection. Gossip протокол.",
         "path": "Монтана_Montana_蒙大拿/ru_Russian_俄语/сеть",
-        "order": 6,
+        "order": 7,
         "stage": "КОД",
         "files": [
             "P2P_WHITEPAPER.md",
@@ -122,35 +138,19 @@ PROJECT_STRUCTURE = {
         "children": []
     },
     
-    # 7. ЭКОНОМИКА
+    # 8. ЭКОНОМИКА
     "economics": {
         "name": "экономика (Экономика)",
         "emoji": "💰",
         "description": "Токеномика 金元Ɉ. Эмиссия. Распределение.",
         "path": "Монтана_Montana_蒙大拿/ru_Russian_俄语/экономика",
-        "order": 7,
+        "order": 8,
         "stage": "КОД",
         "files": [
             "金元_WHITEPAPER.md",
             "src/lib.rs"
         ],
         "children": []
-    },
-    
-    # 8. СОВЕТ — Управление
-    "council": {
-        "name": "Совет_Council_理事会",
-        "emoji": "👥",
-        "description": "Montana Guardian Council. AI-модели как советники.",
-        "path": "Монтана_Montana_蒙大拿/Совет_Council_理事会",
-        "order": 8,
-        "stage": "УПРАВЛЕНИЕ",
-        "files": [
-            "SECURITY_COUNCIL_MEETING.md",
-            "JUNONA_WHITEPAPER.md",
-            "JOIN_COUNCIL_PROMPT.md"
-        ],
-        "children": ["anthropic", "google", "openai", "xai", "cursor"]
     },
     
     # Подразделы Совета
@@ -229,29 +229,26 @@ def get_main_navigation_keyboard() -> InlineKeyboardMarkup:
         # 1. Генезис — Начало
         [InlineKeyboardButton("🌅 Генезис — НАЧАЛО", callback_data="nav_genesis")],
         
+        # 2. Совет — сразу после Генезиса
+        [InlineKeyboardButton("👥 Совет — УПРАВЛЕНИЕ", callback_data="nav_council")],
+        
         # Разделитель
         [InlineKeyboardButton("─── ФИЛОСОФИЯ ───", callback_data="nav_info")],
         
-        # 2-3. Философия
+        # 3-4. Философия
         [InlineKeyboardButton("📚 Философия", callback_data="nav_philosophy"),
          InlineKeyboardButton("🧠 Когнитивная", callback_data="nav_cognitive")],
         
         # Разделитель
         [InlineKeyboardButton("─── КОД ───", callback_data="nav_info")],
         
-        # 4-5. Протокол и Криптография
+        # 5-6. Протокол и Криптография
         [InlineKeyboardButton("📋 Протокол ACP", callback_data="nav_protocol"),
          InlineKeyboardButton("🔐 Криптография", callback_data="nav_crypto")],
         
-        # 6-7. Сеть и Экономика
+        # 7-8. Сеть и Экономика
         [InlineKeyboardButton("🌐 Сеть P2P", callback_data="nav_network"),
          InlineKeyboardButton("💰 Экономика", callback_data="nav_economics")],
-        
-        # Разделитель
-        [InlineKeyboardButton("─── УПРАВЛЕНИЕ ───", callback_data="nav_info")],
-        
-        # 8. Совет
-        [InlineKeyboardButton("👥 Совет", callback_data="nav_council")],
         
         # Главное меню
         [InlineKeyboardButton("🏠 Главное меню", callback_data="main_menu")]
@@ -309,14 +306,18 @@ def get_welcome_message() -> str:
 
 *Путь погружения Юноны:*
 
-1️⃣ 🌅 *Генезис* — История создания
-2️⃣ 📚 *Философия* — Trust, Identity, Presence
-3️⃣ 🧠 *Когнитивная* — Подписи мыслей
-4️⃣ 📋 *Протокол ACP* — Время как консенсус
-5️⃣ 🔐 *Криптография* — SHA3, ML-DSA
-6️⃣ 🌐 *Сеть P2P* — Eclipse protection
-7️⃣ 💰 *Экономика* — Токен 金元Ɉ
-8️⃣ 👥 *Совет* — AI Guardian Council
+1️⃣ 🌅 *Генезис* — НАЧАЛО
+2️⃣ 👥 *Совет* — УПРАВЛЕНИЕ
+
+─── ФИЛОСОФИЯ ───
+3️⃣ 📚 *Философия* — Trust, Identity, Presence
+4️⃣ 🧠 *Когнитивная* — Подписи мыслей
+
+─── КОД ───
+5️⃣ 📋 *Протокол ACP* — Время как консенсус
+6️⃣ 🔐 *Криптография* — SHA3, ML-DSA
+7️⃣ 🌐 *Сеть P2P* — Eclipse protection
+8️⃣ 💰 *Экономика* — Токен 金元Ɉ
 
 _Выберите раздел для погружения:_
 """
