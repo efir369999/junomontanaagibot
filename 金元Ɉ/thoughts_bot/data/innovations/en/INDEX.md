@@ -1,6 +1,6 @@
 # Montana Innovations
 
-**8 unique innovations — honest list**
+**9 unique innovations — honest list**
 
 ---
 
@@ -16,13 +16,14 @@
 
 ---
 
-## Unique Combinations (3)
+## Unique Combinations (4)
 
 | # | Name | File | Description |
 |---|------|------|-------------|
 | 006 | [Hybrid 80/20](006_HYBRID_80_20.md) | consensus.rs | Servers + Humans |
 | 007 | [Post-Quantum](007_POST_QUANTUM.md) | crypto.rs | ML-DSA-65 from genesis |
 | 008 | [Beeple Anchor](008_BEEPLE_ANCHOR.md) | types.rs | Objective genesis price |
+| 009 | [Cicada Response](009_CICADA_RESPONSE.md) | — | Answer to Cicada 3301 |
 
 ---
 
