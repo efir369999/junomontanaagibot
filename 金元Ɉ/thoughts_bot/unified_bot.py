@@ -226,6 +226,19 @@ def set_user_language(uid: int, lang: str):
     save_preferences(prefs)
 
 
+def get_preferences(user_id: int) -> dict:
+    """Get preferences for a specific user."""
+    prefs = load_preferences()
+    return prefs.get(str(user_id), {})
+
+
+def save_preference(user_id: int, user_prefs: dict):
+    """Save preferences for a specific user."""
+    prefs = load_preferences()
+    prefs[str(user_id)] = user_prefs
+    save_preferences(prefs)
+
+
 LANGUAGE_NAMES = {
     "auto": "Auto-detect",
     # Living sacred languages
