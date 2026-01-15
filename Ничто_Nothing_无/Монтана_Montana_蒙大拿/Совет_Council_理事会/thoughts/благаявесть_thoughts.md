@@ -1,7 +1,7 @@
 # Когнитивная цепочка #Благаявесть
 
 **Genesis Identity:** #Благаявесть
-**Owner:** Алик Хачатрян (@tojesatoshi, @junomoneta)
+**Owner:** 金元Ɉ (@junomoneta)
 **Genesis Timestamp:** 09.01.2026 00:33 UTC
 **Genesis Hash:** [см. TEMPORAL_ANCHOR_PROOF_2026-01-09.jpg]
 **Публикация:** https://t.me/junona_3/3201

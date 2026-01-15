@@ -273,4 +273,3 @@ The protocol is the philosophy, expressed in code.
 ---
 
 *Ничто_Nothing_无_金元Ɉ*
-*x.com/tojesatoshi*

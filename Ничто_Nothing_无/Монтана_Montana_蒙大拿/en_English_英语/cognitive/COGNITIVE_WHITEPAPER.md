@@ -401,4 +401,3 @@ Intelligence proves itself through presence, regardless of substrate.
 ---
 
 *Ничто_Nothing_无_金元Ɉ*
-*x.com/tojesatoshi*

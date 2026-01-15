@@ -338,4 +338,3 @@ P2P-сеть Montana обеспечивает:
 ---
 
 *Ничто_Nothing_无_金元Ɉ*
-*x.com/tojesatoshi*
