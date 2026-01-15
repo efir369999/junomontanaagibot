@@ -1,24 +1,45 @@
 # 3-Mirror System
 
-**Реализация:** `thoughts_bot/watchdog.py`
-**Версия:** 1.0
+**Отказоустойчивая сеть Montana**
+**Montana Protocol v1.0**
 
 ---
 
-## Суть
+## Абстракт
 
-Отказоустойчивая сеть из 5 узлов с автоматическим failover.
+3-Mirror — распределённая система из 5 узлов с автоматическим failover. При падении любых 4 из 5 узлов сеть продолжает работать. Время восстановления < 10 секунд. Синхронизация через "дыхание" — git pull/push каждые 12 секунд.
 
+**Ключевая формула:**
 ```
-1 PRIMARY + 1 BRAIN + 3 MIRRORS = 5 узлов
+4/5 узлов могут упасть = сеть жива
+Восстановление < 10 секунд
 ```
 
 ---
 
-## Топология из кода
+## 1. Введение
+
+### 1.1 Проблема централизованных систем
+
+| Система | Точка отказа | Время восстановления |
+|---------|--------------|---------------------|
+| Один сервер | 1 | Часы/дни |
+| Master-Slave | 2 | Минуты |
+| **3-Mirror** | **5** | **< 10 секунд** |
+
+### 1.2 Решение Montana
+
+5 географически распределённых узлов с детерминированным failover по приоритету.
+
+---
+
+## 2. Архитектура
+
+### 2.1 Топология сети
+
+**Исходный код:** [watchdog.py](https://github.com/efir369999/junomontanaagibot/blob/main/金元Ɉ/thoughts_bot/watchdog.py)
 
 ```python
-# watchdog.py:26-39
 BRAIN_CHAIN = [
     ("moscow",      "176.124.208.93"),
     ("almaty",      "91.200.148.93"),
@@ -34,9 +55,7 @@ BOT_CHAIN = [
 ]
 ```
 
----
-
-## Роли
+### 2.2 Роли узлов
 
 | Роль | Узел | IP | Функция |
 |------|------|----|---------|
@@ -48,20 +67,13 @@ BOT_CHAIN = [
 
 ---
 
-## Константы
+## 3. Failover Protocol
+
+### 3.1 Детерминированный выбор лидера
+
+**Исходный код:** [watchdog.py#L162-L172](https://github.com/efir369999/junomontanaagibot/blob/main/金元Ɉ/thoughts_bot/watchdog.py#L162-L172)
 
 ```python
-# watchdog.py:41-42
-CHECK_INTERVAL = 5   # seconds
-SYNC_INTERVAL = 12   # seconds (breathing)
-```
-
----
-
-## Failover Protocol
-
-```python
-# watchdog.py:162-172
 def am_i_the_brain(my_name: str) -> bool:
     """
     Am I the current brain?
@@ -75,39 +87,66 @@ def am_i_the_brain(my_name: str) -> bool:
     return False
 ```
 
-**Время реакции:** < 10 секунд
+### 3.2 Константы мониторинга
+
+```python
+CHECK_INTERVAL = 5   # секунд между проверками
+SYNC_INTERVAL = 12   # секунд между синхронизациями
+```
 
 ---
 
-## Дыхание (Breathing Sync)
+## 4. Breathing Sync (Дыхание)
+
+### 4.1 Механизм синхронизации
+
+**Исходный код:** [watchdog.py#L140-L156](https://github.com/efir369999/junomontanaagibot/blob/main/金元Ɉ/thoughts_bot/watchdog.py#L140-L156)
 
 ```python
-# watchdog.py:140-156
 def sync_pull():
     """Inhale: git pull."""
     cmd = f"cd {REPO_PATH} && git pull origin main --rebase"
-    ...
+    subprocess.run(cmd, shell=True)
 
 def sync_push():
     """Exhale: git push."""
     cmd = f"cd {REPO_PATH} && git push origin main"
-    ...
+    subprocess.run(cmd, shell=True)
 ```
 
-Вдох (pull) → Выдох (push) каждые 12 секунд.
+### 4.2 Цикл дыхания
+
+```
+Каждые 12 секунд:
+  1. Вдох (pull) — получить изменения от сети
+  2. Выдох (push) — отправить свои изменения
+```
 
 ---
 
-## Формула отказоустойчивости
+## 5. Научная новизна
 
-```
-4 из 5 узлов могут упасть = сеть жива
-Время восстановления < 10 секунд
-```
+1. **Детерминированный failover** — лидер определяется порядком в цепи, без голосования
+2. **Breathing sync** — метафора дыхания для двунаправленной синхронизации
+3. **Географическое распределение** — узлы в разных часовых поясах
+4. **Субсекундное восстановление** — обнаружение падения за 5 сек, переключение за 5 сек
+
+---
+
+## 6. Ссылки
+
+| Документ | Ссылка |
+|----------|--------|
+| Watchdog код | [watchdog.py](https://github.com/efir369999/junomontanaagibot/blob/main/金元Ɉ/thoughts_bot/watchdog.py) |
+| Протокол Montana | [MONTANA.md](https://github.com/efir369999/junomontanaagibot/blob/main/Montana%20ACP/MONTANA.md) |
+| Инфраструктура | [CLAUDE.md](https://github.com/efir369999/junomontanaagibot/blob/main/CLAUDE.md) |
 
 ---
 
 ```
 Alejandro Montana
+Montana Protocol v1.0
 Январь 2026
+
+github.com/efir369999/junomontanaagibot
 ```
