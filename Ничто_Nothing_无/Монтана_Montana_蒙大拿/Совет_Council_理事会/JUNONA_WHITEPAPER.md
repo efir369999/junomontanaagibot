@@ -161,8 +161,7 @@ Current test coverage: 22 tests across 6 modules.
 This document is ratified by Junona Council consensus.
 
 ```
-Alejandro Montana
-github.com/afgrouptime
+金元Ɉ
 ```
 
 ---
