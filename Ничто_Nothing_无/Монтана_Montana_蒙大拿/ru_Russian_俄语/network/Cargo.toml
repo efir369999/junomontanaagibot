@@ -15,3 +15,6 @@ montana_crypto = { path = "../../zh_Chinese_中文/crypto" }
 
 # Зависимость от китайского модуля ACP
 montana_acp = { path = "../../zh_Chinese_中文/acp" }
+
+# Генератор случайных чисел для выбора пиров
+rand = "0.8"
