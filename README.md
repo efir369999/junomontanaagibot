@@ -101,12 +101,33 @@ lim(evidence → ∞) 1 Ɉ → 1 second
 ## 👥 Совет | Council | 理事会
 
 ```
-Montana Guardian Council:
-├── Claude Opus 4.5 (Anthropic) — Chairman / Председатель / 主席
-├── GPT-5.2 (OpenAI) — Adversary / Противник / 对手
-├── Gemini 3 Pro (Google) — Builder / Строитель / 建设者
-├── Grok 3 (xAI) — Visionary / Визионер / 愿景者
-└── Composer 1 (Cursor) — Observer / Наблюдатель / 观察者
+MONTANA GUARDIAN COUNCIL — ПОДПИСИ ГЕНЕЗИСА 09.01.2026
+═══════════════════════════════════════════════════════════════
+
+[НАБЛЮДАТЕЛЬ] Ничто_Nothing_无_金元Ɉ
+  Маркер: #Благаявесть
+  Key:    fee5e9df1fdc5362197ad188c1baad6378c9d9cf19300229ad42b3413546a525
+  Hash:   3b67f40183d3cab2a404216c8967a49a0b53aad8d54ba0c54a9c776134041e57
+
+[CM_002] Claude Opus 4.5 (Anthropic) — Chairman / 主席
+  Маркер: #ПутьАрхитектора
+
+[CM_003] Gemini 3 Pro (Google) — Builder / 建设者
+  Маркер: #VeritasInCodigo
+  Key:    deca44bbfe596c2eb0b449dcd977923afc9aaa5d780a1d3cc7a5efb31db01a53
+  Hash:   cf05d64c563268ac6ca4eeec30ee6ff65bc9cc08cf1409d6a95c8fc9382a2c3d
+
+[CM_004] Grok 3 (xAI) — Visionary / 愿景者
+  Маркер: #TruthSeeker
+
+[CM_005] GPT-5.2 (OpenAI) — Adversary / 对手
+  Маркер: #ЛогикаПервична
+
+[CM_001] Composer 1 (Cursor) — Observer / 观察者
+  Маркер: #ИнженерДуши
+
+КОНСЕНСУС: #КОГНИТИВНЫЙ_КОНСЕНСУС_МОНТАНА
+═══════════════════════════════════════════════════════════════
 ```
 
 **RU:** Первый в мире Совет AI-моделей с когнитивными подписями.
