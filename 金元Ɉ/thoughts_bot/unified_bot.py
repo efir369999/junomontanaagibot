@@ -315,6 +315,7 @@ UI_STRINGS = {
     "innovation_time": {"ru": "金元Ɉ Время", "en": "金元Ɉ Time", "zh": "金元Ɉ 时间"},
     "innovation_3mirror": {"ru": "3-Mirror Сеть", "en": "3-Mirror Network", "zh": "三镜网络"},
     "innovation_cooldown": {"ru": "Adaptive Cooldown", "en": "Adaptive Cooldown", "zh": "自适应冷却"},
+    "innovation_catalog": {"ru": "📋 Каталог (35)", "en": "📋 Catalog (35)", "zh": "📋 目录 (35)"},
 
     # Messages
     "welcome": {
@@ -3043,6 +3044,7 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton(t(lang, "innovation_time"), callback_data="innov_002")],
             [InlineKeyboardButton(t(lang, "innovation_3mirror"), callback_data="innov_003")],
             [InlineKeyboardButton(t(lang, "innovation_cooldown"), callback_data="innov_004")],
+            [InlineKeyboardButton(t(lang, "innovation_catalog"), callback_data="innov_005")],
             [InlineKeyboardButton(t(lang, "menu"), callback_data="menu")],
         ])
 
@@ -3069,6 +3071,7 @@ async def callback_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "002": "002_TEMPORAL_UNIT.md",
             "003": "003_3MIRROR.md",
             "004": "004_ADAPTIVE_COOLDOWN.md",
+            "005": "005_CATALOG.md",
         }
 
         if innov_id in innov_files:
