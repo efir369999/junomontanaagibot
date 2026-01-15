@@ -1182,16 +1182,22 @@ def confirm_kb(action: str):
 # ═══════════════════════════════════════════════════════════════════════════════
 # PRESENCE SYSTEM (Ɉ Tokenomics)
 # ═══════════════════════════════════════════════════════════════════════════════
+#
+# Montana Time Units (τ):
+#   τ₁ = 1 min   - Presence signature window
+#   τ₂ = 10 min  - Slice (lottery, distribution) - 3000 Ɉ
+#   τ₃ = 14 days - Checkpoint period
+#   τ₄ = 4 years - Full cycle (halving)
+#
+# Emission: 3000 Ɉ per τ₂, distributed by presence weight
+# ═══════════════════════════════════════════════════════════════════════════════
 
 PRESENCE_FILE = DATA_DIR / "presence.json"
 BALANCES_FILE = DATA_DIR / "balances.json"
 
-# T4 = 4 slices × 10 min = 40 min total
-# Each slice = 1% token distribution
-SLICE_DURATION = 10 * 60  # 10 min per slice
-T4_SLICES = 4  # 4 slices in T4 window
-T4_WINDOW = SLICE_DURATION * T4_SLICES  # 40 min total
-SLICE_REWARD_PERCENT = 1  # 1% per slice
+# τ₂ slice parameters
+TAU2_DURATION = TAU2_SECONDS  # 10 min = 600 sec
+SLICE_REWARD = EMISSION_PER_TAU2  # 3000 Ɉ per τ₂ (from Montana spec)
 
 # Current presence window
 current_window = {
@@ -1225,19 +1231,19 @@ def add_presence(user_id: int, name: str, chars: int):
 
 
 def close_window_and_distribute():
-    """Close slice and distribute 1% by weight (chars in stream)."""
+    """Close τ₂ slice and distribute 3000 Ɉ by presence weight."""
     if not current_window["active"] or not current_window["participants"]:
         current_window["active"] = False
         return {}
 
-    # Calculate total weight (chars)
+    # Calculate total presence weight (by chars as proxy for engagement)
     total_chars = sum(p["chars"] for p in current_window["participants"].values())
     if total_chars == 0:
         current_window["active"] = False
         return {}
 
-    # 1 slice = 1% = 1 Ɉ distributed among participants by weight
-    slice_reward = SLICE_REWARD_PERCENT  # 1 Ɉ per slice
+    # τ₂ slice reward: 3000 Ɉ distributed among participants by weight
+    slice_reward = SLICE_REWARD  # 3000 Ɉ per τ₂
 
     # Distribute by weight (chars contributed)
     balances = load_balances()
@@ -1609,7 +1615,7 @@ async def cmd_window(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if window_active and window_start:
         elapsed = (now - datetime.fromisoformat(window_start)).total_seconds()
-        remaining = SLICE_DURATION - elapsed
+        remaining = TAU2_DURATION - elapsed
         remaining_min = int(remaining // 60)
         remaining_sec = int(remaining % 60)
 
@@ -1622,13 +1628,13 @@ async def cmd_window(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"<b>Time left:</b> {remaining_min}:{remaining_sec:02d}\n"
             f"<b>Participants:</b> {num_participants}\n"
             f"<b>Total chars:</b> {total_chars}\n"
-            f"<b>Emission:</b> {SLICE_REWARD_PERCENT} Ɉ\n\n"
+            f"<b>Emission:</b> {SLICE_REWARD:,} Ɉ\n\n"
         )
 
         if participants:
             text += "<b>Current shares:</b>\n"
             for uid, data in participants.items():
-                share = (data["chars"] / total_chars * SLICE_REWARD_PERCENT) if total_chars > 0 else 0
+                share = (data["chars"] / total_chars * SLICE_REWARD) if total_chars > 0 else 0
                 text += f"• {data['name']}: {share:.4f} Ɉ ({data['chars']} chars)\n"
     else:
         text = (
@@ -3489,19 +3495,19 @@ def save_chats():
 
 
 async def presence_cycle(app):
-    """Background task: Juno mints time every 10 min (1 slice = 1% distribution)."""
+    """Background task: Juno mints τ₂ slices every 10 min (3000 Ɉ distribution)."""
     await asyncio.sleep(10)  # Wait for bot to start
 
     while True:
         try:
-            # Close previous slice and distribute 1%
+            # Close previous τ₂ slice and distribute 3000 Ɉ
             rewards = close_window_and_distribute()
 
             if rewards:
                 # Juno announces rewards elegantly
-                msg = f"🏛 <b>Slice minted</b> — {SLICE_REWARD_PERCENT}% Ɉ\n\n"
+                msg = f"🏛 <b>τ₂ Slice minted</b> — {SLICE_REWARD:,} Ɉ\n\n"
                 for uid, data in rewards.items():
-                    msg += f"⚖️ {data['name']}: +{data['reward']:.4f} Ɉ ({data['weight']*100:.1f}%)\n"
+                    msg += f"⚖️ {data['name']}: +{data['reward']:.2f} Ɉ ({data['weight']*100:.1f}%)\n"
                 msg += f"\n<i>Time waits for no one.</i>"
 
                 for chat_id in active_chats:
@@ -3510,12 +3516,12 @@ async def presence_cycle(app):
                     except:
                         pass
 
-            # Start new slice
+            # Start new τ₂ slice
             start_new_window()
 
-            # Wait 10 minutes (1 slice) - no intrusive notifications
-            print(f"Ɉ Next slice in {SLICE_DURATION//60} min")
-            await asyncio.sleep(SLICE_DURATION)
+            # Wait τ₂ (10 minutes)
+            print(f"Ɉ Next τ₂ slice in {TAU2_DURATION//60} min")
+            await asyncio.sleep(TAU2_DURATION)
 
         except Exception as e:
             print(f"Presence cycle error: {e}")
@@ -3627,7 +3633,7 @@ async def post_init(app):
 def main():
     print(f"🏛 Juno Montana — Control Node")
     print(f"  UTC: {utc_str()}")
-    print(f"  Ɉ: T4={T4_WINDOW//60}min, τ₂={SLICE_DURATION//60}min, emission={SLICE_REWARD_PERCENT}%")
+    print(f"  Ɉ: τ₂={TAU2_DURATION//60}min, emission={SLICE_REWARD:,} Ɉ/τ₂")
 
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
 

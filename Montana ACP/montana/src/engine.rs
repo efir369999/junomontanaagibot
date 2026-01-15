@@ -181,7 +181,7 @@ impl ConsensusEngine {
 
     async fn on_tau1_tick(
         &self,
-        tau1_index: u64,
+        _tau1_index: u64,
         network_time: u64,
         network: &Network,
     ) -> Result<Option<EngineAction>, EngineError> {
@@ -190,13 +190,15 @@ impl ConsensusEngine {
         }
 
         let current_tau2 = *self.current_tau2.read().await;
-        let presence = self.create_presence(current_tau2, network_time)?;
+        let prev_hash = self.get_prev_slice_hash().await;
+        let presence = self.create_presence(current_tau2, network_time, prev_hash);
 
         // Add to own pool
         self.presence_pool.write().await.add(presence.clone());
 
-        // Broadcast to network
-        // network.broadcast_presence(&presence).await;
+        // Convert to network format and broadcast
+        let net_presence = self.presence_to_net_format(&presence);
+        network.broadcast_presence(&net_presence).await;
 
         Ok(Some(EngineAction::PresenceSigned { tau2_index: current_tau2 }))
     }
@@ -204,7 +206,7 @@ impl ConsensusEngine {
     async fn on_tau2_ended(
         &self,
         tau2_index: u64,
-        network_time: u64,
+        _network_time: u64,
         network: &Network,
     ) -> Result<Option<EngineAction>, EngineError> {
         let presences = self.presence_pool.read().await.get_all();
@@ -227,8 +229,11 @@ impl ConsensusEngine {
         // Check if we won
         let our_pubkey = self.get_our_pubkey();
         if winner_pubkey == our_pubkey {
-            let slice = self.produce_slice(presences, result, tau2_index).await?;
-            // network.broadcast_slice(&slice).await;
+            let slice = self.produce_slice(presences, result, tau2_index).await;
+
+            // Convert to network format and broadcast
+            let net_slice = self.slice_to_net_format(&slice);
+            network.broadcast_slice(&net_slice).await;
 
             // Prepare for next τ₂
             self.presence_pool.write().await.clear_for_tau2(tau2_index + 1);
@@ -334,20 +339,28 @@ impl ConsensusEngine {
         &self,
         tau2_index: u64,
         timestamp: u64,
-    ) -> Result<FullNodePresence, EngineError> {
+        prev_hash: Hash,
+    ) -> FullNodePresence {
         let pubkey = self.get_our_pubkey();
-        let prev_hash = [0u8; 32]; // TODO: get from fork_choice
 
-        let presence = FullNodePresence {
+        // Message to sign: domain || timestamp || prev_hash || pubkey || tau2_index
+        let mut message = Vec::with_capacity(128);
+        message.extend_from_slice(b"MONTANA_PRESENCE_V1:");
+        message.extend_from_slice(&timestamp.to_le_bytes());
+        message.extend_from_slice(&prev_hash);
+        message.extend_from_slice(&pubkey);
+        message.extend_from_slice(&tau2_index.to_le_bytes());
+
+        let signature = self.keypair.sign(&message);
+
+        FullNodePresence {
             pubkey,
             tau2_index,
             timestamp,
             prev_slice_hash: prev_hash,
             tier: 0,
-            signature: vec![], // TODO: sign with keypair
-        };
-
-        Ok(presence)
+            signature,
+        }
     }
 
     fn get_our_pubkey(&self) -> [u8; 32] {
@@ -359,6 +372,46 @@ impl ConsensusEngine {
 
     async fn get_prev_slice_hash(&self) -> Hash {
         self.fork_choice.read().await.canonical_head().hash
+    }
+
+    /// Convert internal FullNodePresence to network PresenceProof format
+    fn presence_to_net_format(&self, presence: &FullNodePresence) -> PresenceProof {
+        PresenceProof {
+            pubkey: presence.pubkey.to_vec(),
+            tau2_index: presence.tau2_index,
+            tau1_bitmap: 0x3FF, // All 10 bits set (full presence)
+            prev_slice_hash: presence.prev_slice_hash,
+            timestamp: presence.timestamp,
+            signature: presence.signature.clone(),
+            cooldown_until: 0,
+        }
+    }
+
+    /// Convert internal consensus::Slice to network types::Slice format
+    fn slice_to_net_format(&self, slice: &Slice) -> NetSlice {
+        let presences: Vec<PresenceProof> = slice.full_node_presences.iter()
+            .map(|p| self.presence_to_net_format(p))
+            .collect();
+
+        let header = crate::types::SliceHeader {
+            prev_hash: slice.header.prev_slice_hash,
+            timestamp: slice.header.timestamp,
+            slice_index: slice.header.height,
+            winner_pubkey: slice.header.producer_pubkey.to_vec(),
+            cooldown_medians: [0, 0, 0],
+            registrations: [0, 0, 0],
+            cumulative_weight: 0,
+            subnet_reputation_root: [0u8; 32],
+        };
+
+        NetSlice {
+            header,
+            presence_root: slice.header.presence_root,
+            tx_root: slice.header.tx_root,
+            signature: slice.producer_signature.clone(),
+            presences,
+            transactions: vec![],
+        }
     }
 
     fn presence_to_participant(&self, presence: &FullNodePresence) -> LotteryParticipant {
@@ -443,14 +496,16 @@ impl ConsensusEngine {
         presences: Vec<FullNodePresence>,
         lottery_result: LotteryResult,
         tau2_index: u64,
-    ) -> Result<Slice, EngineError> {
+    ) -> Slice {
         let prev_hash = self.get_prev_slice_hash().await;
 
-        // Merkle tree for presences
-        let presence_hashes: Vec<Hash> = presences.iter()
-            .map(|p| crate::crypto::sha3(&p.pubkey))
+        // Merkle tree for presences (canonical order by timestamp, hash)
+        let mut presence_entries: Vec<(u64, Hash)> = presences.iter()
+            .map(|p| (p.timestamp, crate::crypto::sha3(&p.pubkey)))
             .collect();
-        let presence_tree = MerkleTree::new(presence_hashes);
+        presence_entries.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+        let sorted_hashes: Vec<Hash> = presence_entries.into_iter().map(|(_, h)| h).collect();
+        let presence_tree = MerkleTree::new(sorted_hashes);
         let presence_root = presence_tree.root();
 
         let header = SliceHeader {
@@ -467,14 +522,18 @@ impl ConsensusEngine {
             finality_checkpoint: None,
         };
 
-        Ok(Slice {
+        // Sign the header hash
+        let header_hash = header.hash();
+        let producer_signature = self.keypair.sign(&header_hash);
+
+        Slice {
             header,
             full_node_presences: presences,
             verified_user_presences: vec![],
             transactions: vec![],
-            producer_signature: vec![], // TODO: sign
+            producer_signature,
             attestations: vec![],
-        })
+        }
     }
 
     async fn verify_slice(&self, slice: &Slice) -> Result<(), EngineError> {
